@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Privacidad — FromE Chat</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<nav aria-label="Navegación principal">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/"><span>From<span style="color:var(--accent)">E</span> Chat</span> <span class="by">by From E™ Systems</span></a>
+    <a class="btn" href="/chat/">Abrir FromE Chat</a>
+  </div>
+</nav>
+<main>
+<section>
+  <div class="wrap section-grid">
+    <div class="section-label">Privacidad</div>
+    <div style="max-width:760px">
+      <h2>Qué se guarda, qué no, y dónde.</h2>
+      <p class="lead">FromE Chat está diseñado para no saber nada de ti salvo lo que decidas aportar a la investigación.</p>
+
+      <h3>Tu clave de API</h3>
+      <p class="lead">Se envía por HTTPS a nuestro servidor con cada mensaje, se usa en esa llamada al proveedor del modelo y se descarta. No se escribe en registros ni en ningún almacén. Si marcas «Recordar en este navegador», se guarda cifrada en tu propio dispositivo; ese cifrado protege frente a la lectura casual del almacenamiento, no frente a quien controle tu navegador. Puedes borrarla desmarcando la casilla, y revocarla en cualquier momento desde la consola de Anthropic.</p>
+
+      <h3>Tus conversaciones</h3>
+      <p class="lead">Viven en la memoria de tu navegador mientras la pestaña está abierta. El servidor las reenvía al proveedor y no las conserva. El proveedor las trata según sus propias condiciones, que son las que aceptaste al crear tu clave.</p>
+
+      <h3>Investigación con consentimiento</h3>
+      <p class="lead">Solo si activas «Aportar esta sesión, anonimizada», el servidor guarda, por cada turno: la conversación, el modelo, la condición (con o sin From E™), el consumo de tokens y un hash SHA-256 del registro. No se guarda tu clave, ni tu correo, ni tu dirección IP, ni ningún identificador de tu cuenta. El identificador de sesión es aleatorio y se genera en tu navegador. El almacenamiento es el del propio sitio, en la infraestructura del proveedor de alojamiento. Los datos se usan para la serie de medición de la arquitectura From E™ y para publicaciones en forma agregada. Puedes desactivar el consentimiento en cualquier momento; los turnos ya guardados pueden eliminarse escribiendo a la dirección de contacto con tu identificador de sesión.</p>
+
+      <h3>Sin cuentas, sin cookies de terceros</h3>
+      <p class="lead">No hay registro de usuario, no hay analítica de terceros, no hay publicidad. El sitio no coloca cookies.</p>
+
+      <h3>Responsable</h3>
+      <p class="lead">Volyen Project SL (From E™ Systems), Barcelona. Contacto: <a href="mailto:frome.labs@proton.me" style="text-decoration:underline;text-underline-offset:3px">frome.labs@proton.me</a>.</p>
+      <div class="note">El texto legal completo (base jurídica, plazos de conservación, derechos RGPD) se incorporará tras su revisión jurídica antes de la publicación general.</div>
+    </div>
+  </div>
+</section>
+</main>
+<footer>
+  <div class="wrap footer-inner">
+    <span>FromE Chat · by From E™ Systems (Volyen Project SL, Barcelona)</span>
+    <span><a href="/">Inicio</a> · <a href="https://github.com/FromE-Labs/FromeCHAT" target="_blank" rel="noopener">Código</a></span>
+  </div>
+</footer>
+</body>
+</html>

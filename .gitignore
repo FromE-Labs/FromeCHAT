@@ -1,0 +1,8 @@
+node_modules/
+.netlify/
+.env
+*.log
+
+# Especificaciones Open Core: se descargan en el build desde el repositorio privado.
+governance/[0-9]*.md
+governance/LICENSE-open-core

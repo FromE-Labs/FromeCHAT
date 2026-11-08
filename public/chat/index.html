@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>FromE Chat</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<nav aria-label="Navegación principal">
+  <div class="wrap nav-inner" style="width:calc(100% - 44px);max-width:none">
+    <a class="brand" href="/"><span>From<span style="color:var(--accent)">E</span> Chat</span> <span class="by">by From E™ Systems</span></a>
+    <div class="navlinks">
+      <span class="pill on" id="pill-gov"><span class="dot"></span> From E™ activa · 7 módulos</span>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn secondary" id="btn-new" type="button">Nueva conversación</button>
+      <a class="btn ghost" href="/">Qué es</a>
+    </div>
+  </div>
+</nav>
+
+<div class="app">
+  <aside class="sidebar" aria-label="Configuración de la sesión">
+    <div>
+      <h4>Tu clave de API</h4>
+      <p>Clave de la consola de Anthropic (empieza por <code>sk-ant-</code>). Se envía con cada mensaje y no se almacena en el servidor.</p>
+      <div class="field">
+        <div class="keyrow">
+          <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" aria-label="Clave de API de Anthropic">
+          <button class="btn secondary" id="btn-eye" type="button" aria-label="Mostrar u ocultar la clave" style="padding:0 12px">👁</button>
+        </div>
+      </div>
+      <label class="toggle" id="t-remember" style="margin-top:8px">
+        <input type="checkbox" id="remember">
+        <span><b>Recordar en este navegador</b><small>Guardada cifrada en tu dispositivo. Nunca en nuestro servidor.</small></span>
+      </label>
+      <p class="state" id="key-state" style="margin-top:8px"></p>
+    </div>
+
+    <div>
+      <h4>Modelo</h4>
+      <div class="field">
+        <select id="model" aria-label="Modelo de frontera"></select>
+      </div>
+    </div>
+
+    <div>
+      <h4>Arquitectura</h4>
+      <label class="toggle on" id="t-governed">
+        <input type="checkbox" id="governed" checked>
+        <span><b>From E™ Open Core</b><small>Siete módulos aplicados en servidor en cada turno. Apágala para ver el modelo sin gobernanza.</small></span>
+      </label>
+      <label class="toggle" id="t-compare" style="margin-top:8px">
+        <input type="checkbox" id="compare">
+        <span><b>Comparador</b><small>Misma pregunta con y sin From E™, lado a lado. Consume el doble de tokens.</small></span>
+      </label>
+    </div>
+
+    <div>
+      <h4>Investigación</h4>
+      <label class="toggle" id="t-consent">
+        <input type="checkbox" id="consent">
+        <span><b>Aportar esta sesión, anonimizada</b><small>Se guarda la conversación, el modelo y la condición (con o sin From E™) con un hash de evidencia. Nunca tu clave, ni correo, ni IP. Puedes apagarlo en cualquier momento; no afecta al funcionamiento.</small></span>
+      </label>
+    </div>
+
+    <div class="foot">FromE Chat by From E™ Systems · <a href="/privacidad/">Privacidad</a> · <a href="https://frome-one.com/es/" target="_blank" rel="noopener">Servicios From E™ ONE</a> · <a href="https://doi.org/10.5281/zenodo.19041459" target="_blank" rel="noopener">Especificación</a></div>
+  </aside>
+
+  <section class="main" aria-label="Conversación">
+    <div class="banner" id="banner" hidden>
+      <span><b>Comparador activo.</b> Cada mensaje se envía dos veces (con y sin From E™) y gasta el doble de tokens de tu clave.</span>
+      <button class="btn secondary" id="btn-compare-off" type="button">Desactivar</button>
+    </div>
+    <div class="panes" id="panes">
+      <div class="pane" id="pane-a">
+        <div class="pane-head"><b id="head-a">From E™ Open Core</b><span id="meta-a"></span></div>
+        <div class="thread" id="thread-a">
+          <div class="empty" id="empty">
+            <h3>Trabaja. La arquitectura hace el resto.</h3>
+            <p>Plantea un problema real: una decisión, un texto que revisar, un análisis, una duda técnica. From E™ está activa desde el primer mensaje.</p>
+            <div class="ex">
+              <button type="button" data-ex="Revisa este razonamiento y señala cada punto donde doy algo por supuesto sin verificarlo: ">Revisar un razonamiento y separar hecho de supuesto</button>
+              <button type="button" data-ex="Tengo que decidir entre dos opciones. Te doy el contexto y quiero que me devuelvas criterios de decisión, no una recomendación: ">Preparar una decisión con criterios, sin que decida por mí</button>
+              <button type="button" data-ex="Resume este documento en tres niveles: lo verificable, lo interpretado por el autor y lo que no se puede saber a partir del texto: ">Resumir en tres niveles: verificable, interpretado, no observable</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pane" id="pane-b" hidden>
+        <div class="pane-head"><b>Sin arquitectura</b><span id="meta-b"></span></div>
+        <div class="thread" id="thread-b"></div>
+      </div>
+    </div>
+    <form class="composer" id="composer">
+      <div class="composer-inner">
+        <textarea id="input" rows="1" placeholder="Escribe tu mensaje. Enter envía, Mayús+Enter salta de línea." aria-label="Mensaje"></textarea>
+        <button class="btn" id="btn-send" type="submit">Enviar</button>
+      </div>
+      <div class="hint">
+        <span id="hint-left">Tu clave se usa solo en esta llamada. La conversación vive en tu navegador.</span>
+        <span id="hint-right"></span>
+      </div>
+    </form>
+  </section>
+</div>
+
+<script src="/assets/app.js" defer></script>
+</body>
+</html>
