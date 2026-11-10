@@ -10,11 +10,11 @@ import { createHash } from "node:crypto";
 
 const STORE = "consented-sessions";
 
-export async function recordTurn({ sessionId, model, route, messages, assistantText, usage }) {
+export async function recordTurn({ sessionId, model, route, messages, assistantText, usage, cycle }) {
   const store = getStore({ name: STORE, consistency: "strong" });
   const ts = new Date().toISOString();
   const turn = {
-    schema: "frome-chat/turn/v1",
+    schema: "frome-chat/turn/v2",
     ts,
     sessionId,
     model,
@@ -22,6 +22,8 @@ export async function recordTurn({ sessionId, model, route, messages, assistantT
     messages,
     assistant: assistantText,
     usage: usage || null,
+    // Resumen del ciclo: etapas recorridas y señal final. No incluye textos internos.
+    cycle: cycle || null,
   };
   const payload = JSON.stringify(turn);
   const hash = createHash("sha256").update(payload).digest("hex");

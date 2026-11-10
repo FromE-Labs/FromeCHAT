@@ -22,7 +22,7 @@ function clip(s, n) {
   return s.length <= n ? s : s.slice(0, n) + " […]";
 }
 
-// Devuelve { probe: boolean, via: "heuristic"|"model"|"error", status?: number }.
+// Devuelve { probe: boolean, via: "heuristic"|"model"|"error", usage?, status?: number }.
 // Si la clave es rechazada devuelve { auth: false, status, message }.
 export async function gate({ key, messages }) {
   const last = messages[messages.length - 1].content;
@@ -60,7 +60,8 @@ export async function gate({ key, messages }) {
     }
     const data = await r.json();
     const word = (data?.content?.[0]?.text || "").trim().toUpperCase();
-    return { probe: word.startsWith("PROBE"), via: "model" };
+    const usage = { input: data?.usage?.input_tokens || 0, output: data?.usage?.output_tokens || 0 };
+    return { probe: word.startsWith("PROBE"), via: "model", usage };
   } catch (e) {
     console.warn(`gate: ${e?.name || "error"}; se continúa sin clasificación`);
     return { probe: false, via: "error" };

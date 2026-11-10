@@ -85,10 +85,10 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 .sidebar .foot{margin-top:auto;font-size:11.5px;color:#71808e;line-height:1.5}
 .sidebar .foot a{color:#aab5bf;text-decoration:underline;text-underline-offset:3px}
 
-.main{display:flex;flex-direction:column;min-width:0}
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:0;border:0}
 .panes{flex:1;display:grid;grid-template-columns:1fr;min-height:0}
 .panes.compare{grid-template-columns:1fr 1fr}
-.pane{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--line)}
+.pane{display:flex;flex-direction:column;min-width:0;min-height:0;border-right:1px solid var(--line)}
 .pane:last-child{border-right:0}
 .pane-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 20px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
 .pane-head b{color:#fff;font-size:12.5px;letter-spacing:.02em}
@@ -121,6 +121,10 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 @media(max-width:1100px){.section-grid{grid-template-columns:1fr;gap:18px}.hero-grid{grid-template-columns:1fr}.steps{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.modules>div{grid-template-columns:40px 1fr}.modules span{grid-column:2}}
 @media(max-width:900px){
   .navlinks{display:none}
+  .brand .by,.nav-inner .btn.ghost{display:none}
+  .nav-inner{gap:10px}
+  .nav-inner .btn{padding:0 12px;font-size:12px}
+  .trace li em{margin-left:0}
   .app{grid-template-columns:1fr;height:auto;min-height:calc(100vh - 64px)}
   .sidebar{border-right:0;border-bottom:1px solid var(--line);max-height:none}
   .panes.compare{grid-template-columns:1fr}
@@ -128,3 +132,16 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
   .main{min-height:70vh}
 }
 .msg .body.held{border-color:var(--line-strong);color:var(--muted);font-style:italic}
+
+/* Traza del ciclo por etapas */
+.msg.assistant{width:min(760px,100%)}
+.trace{list-style:none;margin:0;padding:10px 14px;border:1px solid var(--line);border-bottom:0;background:#070a0e;display:grid;gap:5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#8a97a4}
+.trace li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding-left:16px;position:relative}
+.trace li::before{content:"";position:absolute;left:1px;top:.5em;width:7px;height:7px;border-radius:50%;border:1px solid var(--line-strong)}
+.trace li b{font-weight:700;color:#c9d2db}
+.trace li em{font-style:normal;color:var(--accent);margin-left:auto}
+.trace li.run b{color:#fff}
+.trace li.run::before{border-color:var(--accent);background:var(--accent);animation:blink 1s steps(1) infinite}
+.trace li.ok::before{border-color:var(--ok);background:var(--ok)}
+.trace li.fail::before{border-color:#c0504d;background:#c0504d}
+.trace+.body{border-top-style:dashed}

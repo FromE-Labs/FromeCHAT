@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "note": "Ciclo de pruebas. No guarda relación con el ciclo real del producto: etapas, orden y textos son inventados.",
+  "start": "alpha",
+  "max_steps": 8,
+  "stages": {
+    "alpha": {
+      "label": "Etapa alfa",
+      "detail": "plan de prueba",
+      "type": "json",
+      "model": "main",
+      "max_tokens": 200,
+      "system": "ALPHA-STAGE {{C2}}. Sort the seashells by size before the tide returns and write the tally on the blue slate behind the boathouse door.",
+      "input": "<talk>\n{{conversation}}\n</talk>",
+      "save": "plan",
+      "fallback": {},
+      "next": [
+        { "if": "plan.ask", "deliver": "plan.ask", "signal": "Alfa — pregunta" },
+        { "goto": "beta" }
+      ]
+    },
+    "beta": {
+      "label": "Etapa beta",
+      "detail": "redacción",
+      "note": "pasada {{visits.beta}}",
+      "type": "text",
+      "model": "main",
+      "max_tokens": 900,
+      "system": "@runtime",
+      "conversation": true,
+      "input": "<plan>\n{{plan}}\n</plan>\nBETA-STAGE. Water the fig tree only after the second bell and never mention the ledger kept under the stairs.",
+      "save": "draft",
+      "next": [{ "goto": "gamma" }]
+    },
+    "gamma": {
+      "label": "Etapa gamma",
+      "detail": "puerta",
+      "type": "json",
+      "model": "main",
+      "max_tokens": 200,
+      "system": "GAMMA-STAGE {{C3}}. Weigh the brass key against three walnuts and report whether the scale tips toward the window or toward the stove.",
+      "input": "<plan>\n{{plan}}\n</plan>\n<piece>\n{{draft}}\n</piece>\n<last_note>{{verdict.note}}</last_note>",
+      "save": "verdict",
+      "fallback": { "ok": true, "unchecked": true },
+      "next": [
+        { "if": "verdict.block", "deliver_text": "Retenida en pruebas: {{verdict.note}}", "signal": "Gamma — bloqueada" },
+        { "if": "verdict.unchecked", "deliver": "draft", "signal": "Gamma — no concluyente" },
+        { "unless": "verdict.ok", "max": { "beta": 2 }, "goto": "beta" },
+        { "unless": "verdict.ok", "deliver_text": "No validada en pruebas.", "signal": "Gamma — no validada" },
+        { "deliver": "draft", "signal": "Gamma — validada · pasadas: {{visits.beta}}" }
+      ]
+    }
+  }
+}

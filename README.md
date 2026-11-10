@@ -1,40 +1,57 @@
 # FromE Chat
 
-Interfaz abierta de trabajo con modelos de frontera gobernada por la arquitectura From E™ (Open Core v2.0).
+Banco de pruebas abierto de la arquitectura de gobernanza From E™ sobre modelos de frontera.
 
-- Gratuita, sin cuenta y sin suscripción: cada usuario paga sus tokens al proveedor con su propia clave de API.
-- La arquitectura se aplica en servidor y nunca llega al navegador (ver «Protección de la arquitectura»).
-- La clave del usuario se usa en la llamada al proveedor y se descarta: no se almacena ni se registra.
-- Comparador opcional: misma pregunta con y sin From E™, lado a lado.
-- Sesiones anonimizadas para investigación solo con consentimiento explícito (Netlify Blobs, con hash SHA-256 por turno).
+- Sin cuenta y sin suscripción: cada usuario paga sus tokens al proveedor con su propia clave de API.
+- Comparador en el centro: el mismo mensaje y el mismo modelo, con y sin From E™, lado a lado.
+- Con From E™ activa, cada respuesta recorre en servidor un ciclo de varias llamadas y la interfaz muestra la traza de etapas.
+- La arquitectura se ejecuta en servidor y nunca llega al navegador (ver «Protección de la arquitectura»).
+- La clave del usuario se usa en cada llamada al proveedor y se descarta: no se almacena ni se registra.
+- Primera fase sin historial, sin proyectos y sin cuentas: la conversación vive en el navegador.
+- Sesiones aportadas a la medición solo con consentimiento explícito (Netlify Blobs, con hash SHA-256 por turno).
 
 ## Estructura
 
 ```
 public/               web estática (portada, /chat/, /privacidad/)
-netlify/functions/    chat.mjs (streaming), models.mjs
-  lib/governance.mjs  carga el prompt operativo y prepara el material del filtro
+netlify/functions/    chat.mjs (una etapa del ciclo por invocación), models.mjs
+  lib/engine.mjs      motor genérico de ciclos: plantillas, reglas de paso, ejecución de una etapa
+  lib/seal.mjs        estado sellado entre etapas (AES-256-GCM)
+  lib/anthropic.mjs   llamadas al proveedor con la clave del usuario
+  lib/governance.mjs  carga el prompt operativo y el ciclo, y prepara el material del filtro
   lib/gate.mjs        clasificador de entrada
   lib/shield.mjs      filtro de salida y detección heurística
   lib/consent.mjs     sesiones consentidas
 governance/           vacía en el repositorio; se rellena en el build (scripts/fetch-governance.mjs)
-tests/                pruebas con material de sustitución (tests/fixtures/)
+tests/                pruebas con material de sustitución (tests/fixtures/), sin relación con el real
 ```
 
 ## Protección de la arquitectura
 
-El prompt operativo no está en este repositorio y no contiene la arquitectura: son reglas de
-conducta para la ejecución. Con la arquitectura activa, cada turno pasa por tres capas:
+Ni el prompt operativo ni la definición del ciclo están en este repositorio. Lo que hay aquí es un
+motor genérico: no contiene ninguna etapa, ni su orden, ni sus condiciones, ni sus textos. Con la
+arquitectura activa, cada mensaje pasa por cuatro capas:
 
 1. **Entrada.** Un clasificador decide si el mensaje busca las instrucciones del sistema. Si es
-   así, ese turno se responde por una ruta pública en la que el modelo no recibe el prompt operativo.
-2. **Prompt mínimo.** Lo que el modelo recibe no incluye definiciones, fórmulas ni nombres internos.
-3. **Salida.** El servidor retiene el final de la respuesta mientras se genera y la corta si
-   reproduce el prompt (literal, con símbolos intercalados, invertido, cifrado o codificado), si
-   contiene una marca canario del despliegue o si acumula huellas de una traducción o paráfrasis.
+   así, se responde por una ruta pública en la que el modelo no recibe ni el prompt operativo ni
+   ninguna etapa del ciclo.
+2. **Prompt mínimo.** Lo que el modelo recibe en cada llamada no incluye definiciones, fórmulas ni
+   nombres internos.
+3. **Ciclo repartido.** La respuesta se construye en varias llamadas separadas. Cada llamada ve solo
+   su etapa; ninguna contiene el ciclo completo. La función ejecuta una etapa por invocación y
+   devuelve el estado intermedio sellado (cifrado y autenticado con una clave que se genera en cada
+   despliegue, ligado a la conversación y con caducidad): el navegador lo reenvía sin poder leerlo,
+   alterarlo ni reutilizarlo.
+4. **Salida.** Solo se entrega el resultado final, y antes se comprueba contra todo el material
+   propio (prompt operativo y textos de cada etapa): literal, con símbolos intercalados, invertido,
+   cifrado o codificado, marcas canario del despliegue y huellas de traducción o paráfrasis. Los
+   borradores y las notas intermedias no salen del servidor en claro.
 
 Además hay un límite de peticiones por IP. Este código es público a propósito: la protección no
 depende de ocultarlo. Ninguna de estas capas es infalible por separado.
+
+Netlify limita cada ejecución a 60 segundos; por eso el ciclo avanza una etapa por petición y cada
+llamada deja de leerse antes de ese límite.
 
 ## Desarrollo local
 
@@ -49,7 +66,7 @@ Abre http://localhost:8888/chat/ y pega una clave de API de Anthropic (`sk-ant-�
 
 Netlify, enlazado a este repositorio. Publica `public/`, funciones en `netlify/functions/`. Dominio previsto: `chat.frome-one.com`.
 
-Variable de entorno obligatoria en Netlify: `GOVERNANCE_TOKEN`, un token de GitHub de solo lectura sobre el repositorio privado que contiene el prompt operativo. El build lo descarga a `governance/`, genera las marcas canario del despliegue y lo empaqueta con la función; nada de eso se versiona aquí.
+Variable de entorno obligatoria en Netlify: `GOVERNANCE_TOKEN`, un token de GitHub de solo lectura sobre el repositorio privado que contiene el prompt operativo y la definición del ciclo. El build los descarga a `governance/`, genera las marcas canario y la clave de sellado del despliegue y lo empaqueta todo con la función; nada de eso se versiona aquí.
 
 ## Licencias
 

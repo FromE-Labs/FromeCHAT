@@ -5,6 +5,7 @@ export default async () =>
     JSON.stringify({
       models: Object.entries(MODELS).map(([id, m]) => ({ id, label: m.label })),
       openCoreModules: 7,
+      maxOutputTokens: 3000,
       architecture: "From E™",
       spec: "https://doi.org/10.5281/zenodo.19041459",
     }),

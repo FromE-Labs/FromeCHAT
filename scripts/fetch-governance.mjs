@@ -1,18 +1,19 @@
-// Descarga en el build el prompt operativo de FromE Chat y sus huellas desde el
-// repositorio privado, y genera las marcas canario de este despliegue.
+// Descarga en el build el prompt operativo de FromE Chat, la definición del ciclo y
+// sus huellas desde el repositorio privado, y genera las marcas canario y la clave
+// del estado sellado de este despliegue.
 // Requiere GOVERNANCE_TOKEN (token de GitHub de solo lectura sobre ese repositorio).
 // Nada de lo que escribe este script se versiona aquí (ver .gitignore).
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { randomInt } from "node:crypto";
+import { randomInt, randomBytes } from "node:crypto";
 
 const REPO = process.env.GOVERNANCE_REPO || "FromE-Labs/from-e-architecture";
 const PATH = process.env.GOVERNANCE_PATH || "runtime/fromechat";
 const REF = process.env.GOVERNANCE_REF || "main";
 const TOKEN = process.env.GOVERNANCE_TOKEN;
 const OUT = new URL("../governance/", import.meta.url);
-const FILES = ["runtime.md", "fingerprints.json"];
+const FILES = ["runtime.md", "pipeline.json", "fingerprints.json"];
 
 // Palabra inventada y pronunciable: sobrevive a una traducción como si fuera un nombre propio.
 function canaryWord() {
@@ -45,6 +46,7 @@ async function main() {
   }
   const canaries = Array.from({ length: 4 }, canaryWord);
   await writeFile(new URL("canary.json", OUT), JSON.stringify({ build: new Date().toISOString(), canaries }), "utf8");
-  console.log("governance: marcas canario generadas para este despliegue.");
+  await writeFile(new URL("seal.key", OUT), randomBytes(32).toString("hex"), "utf8");
+  console.log("governance: marcas canario y clave de sellado generadas para este despliegue.");
 }
 main();

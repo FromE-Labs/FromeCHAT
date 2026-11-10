@@ -1,33 +1,43 @@
-// FromE Chat — función de streaming.
-// Recibe { key, model, governed, messages, consent, sessionId } y llama a Anthropic con
-// la clave del usuario. La clave se usa en esta petición y se descarta: no se escribe
-// en registros, no se guarda en ningún almacén, no se devuelve al cliente.
+// FromE Chat — función principal.
+// Recibe { key, model, governed, messages, consent, sessionId, state? } y llama a
+// Anthropic con la clave del usuario. La clave se usa en esta petición y se descarta:
+// no se escribe en registros, no se guarda en ningún almacén, no se devuelve al cliente.
 //
-// Con la arquitectura activa, cada turno pasa por tres capas:
-//   1. Clasificador de entrada: si el mensaje pregunta por las instrucciones del sistema,
-//      el turno se responde por la ruta pública, sin prompt operativo.
-//   2. Prompt operativo mínimo (reglas de conducta; no contiene la arquitectura).
-//   3. Filtro de salida: retiene el final de la respuesta y la corta si reproduce el prompt.
+// Sin arquitectura: una llamada directa al modelo, retransmitida tal cual.
+//
+// Con la arquitectura activa, cada mensaje recorre un ciclo de varias llamadas:
+//   1. Clasificador de entrada. Si el mensaje pregunta por las instrucciones del
+//      sistema, se responde por la ruta pública: sin prompt operativo y sin ciclo.
+//   2. Ciclo por etapas. Cada invocación de esta función ejecuta una sola etapa y
+//      devuelve el estado sellado; el navegador lo reenvía para la siguiente. La
+//      definición del ciclo no está en este repositorio.
+//   3. Filtro de salida. Lo que se entrega se comprueba contra todo el material
+//      propio (prompt operativo y textos de cada etapa) antes de salir.
 
-import { governedSystem, loadGovernance, PUBLIC_SYSTEM, UNGOVERNED_SYSTEM, SIGNAL_NAMES } from "./lib/governance.mjs";
+import { loadGovernance, PUBLIC_SYSTEM, UNGOVERNED_SYSTEM } from "./lib/governance.mjs";
 import { LeakFilter } from "./lib/shield.mjs";
 import { gate } from "./lib/gate.mjs";
 import { recordTurn } from "./lib/consent.mjs";
-
-const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
+import { openStream, readStream, upstreamError } from "./lib/anthropic.mjs";
+import { runStage, newState, contextOf, getPath, render } from "./lib/engine.mjs";
+import { seal, unseal, bindingOf, STATE_TTL_MS } from "./lib/seal.mjs";
 
 // Modelos de frontera ofrecidos. Se valida contra esta lista para que el servidor
 // nunca reenvíe un identificador arbitrario.
 export const MODELS = {
-  "claude-opus-5-5": { label: "Claude Opus 5.5", max: 8192 },
-  "claude-sonnet-5-5": { label: "Claude Sonnet 5.5", max: 8192 },
-  "claude-fable-5-1": { label: "Claude Fable 5.1", max: 8192 },
+  "claude-opus-5-5": { label: "Claude Opus 5.5" },
+  "claude-sonnet-5-5": { label: "Claude Sonnet 5.5" },
+  "claude-fable-5-1": { label: "Claude Fable 5.1" },
 };
 
+// Netlify corta cada ejecución a los 60 s. Se deja de leer del proveedor antes.
+const BUDGET_MS = Number(process.env.STEP_BUDGET_MS) || 52000;
+// Mismo techo de salida para la respuesta directa y para la gobernada.
+const MAX_OUTPUT = 3000;
 const MAX_MESSAGES = 60;
 const MAX_CHARS_PER_MESSAGE = 24000;
-const PUBLIC_SIGNAL = "\n\n⟶ Signal: Límite de divulgación — respuesta con información pública";
+const PUBLIC_SIGNAL = "Límite de divulgación — respuesta con información pública";
+const TRUNCATED_NOTE = "\n\n[Respuesta cortada por el límite de tiempo de la plataforma.]";
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -54,12 +64,156 @@ function sanitizeMessages(raw) {
   return out;
 }
 
-function mapSignals(text) {
-  return text.replace(/(⟶ Signal:\s*)S([1-7])\b/g, (_, pre, n) => pre + SIGNAL_NAMES[n]);
+// Respuesta SSE con latido: run(send) emite eventos; el flujo se cierra al terminar.
+function sse(route, run) {
+  const enc = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      let open = true;
+      const write = (s) => {
+        if (open) controller.enqueue(enc.encode(s));
+      };
+      const send = (ev) => write(`data: ${JSON.stringify(ev)}\n\n`);
+      const beat = setInterval(() => write(": ping\n\n"), 10000);
+      try {
+        send({ type: "frome_route", route });
+        await run(send);
+      } catch {
+        send({ type: "error", error: { message: "Se ha interrumpido la respuesta.", retryable: true } });
+      } finally {
+        clearInterval(beat);
+        open = false;
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-store",
+      "x-frome-governed": route === "baseline" ? "0" : "1",
+    },
+  });
+}
+
+function sendText(send, text) {
+  for (let i = 0; i < text.length; i += 400) {
+    send({ type: "content_block_delta", delta: { type: "text_delta", text: text.slice(i, i + 400) } });
+  }
+}
+
+// Comprueba un texto completo contra el material propio. Devuelve true si puede salir.
+function clean(g, text) {
+  const f = new LeakFilter(g);
+  f.push(text);
+  f.end();
+  if (f.blocked) console.warn(`shield: texto retenido (${f.blocked})`);
+  return !f.blocked;
+}
+
+// Una llamada directa retransmitida: sin arquitectura (baseline) o ruta pública.
+async function single({ route, key, model, messages, consent, sessionId, deadline, extraUsage }) {
+  const upstream = await openStream({
+    key,
+    model,
+    system: route === "public" ? PUBLIC_SYSTEM : UNGOVERNED_SYSTEM,
+    messages,
+    maxTokens: MAX_OUTPUT,
+  });
+  if (!upstream.ok || !upstream.body) {
+    const e = await upstreamError(upstream);
+    // Nunca se incluye la clave en el mensaje de error.
+    return json(e.status === 401 ? 401 : 502, { error: "upstream", status: e.status, message: e.message });
+  }
+  return sse(route, async (send) => {
+    let delivered = "";
+    const r = await readStream(upstream, {
+      deadline,
+      onText: (t) => {
+        delivered += t;
+        send({ type: "content_block_delta", delta: { type: "text_delta", text: t } });
+      },
+    });
+    if (r.failed && !delivered) {
+      send({ type: "error", error: { message: r.failed, retryable: true } });
+      return;
+    }
+    if (r.truncated || r.failed) send({ type: "frome_truncated" });
+    if (route === "public") send({ type: "frome_signal", text: PUBLIC_SIGNAL });
+    const usage = {
+      input: r.usage.input + (extraUsage?.input || 0),
+      output: r.usage.output + (extraUsage?.output || 0),
+      calls: 1 + (extraUsage ? 1 : 0),
+    };
+    send({ type: "frome_usage", usage });
+    if (consent && sessionId && delivered) {
+      // Sin clave, sin IP, sin cabeceras.
+      await recordTurn({ sessionId, model, route, messages, assistantText: delivered, usage }).catch(() => {});
+    }
+  });
+}
+
+// Una etapa del ciclo gobernado.
+function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline }) {
+  const { pipeline, guard, sealKey } = g;
+  return sse("governed", async (send) => {
+    const id = st.next;
+    const stage = pipeline.stages[id];
+    send({ type: "frome_stage", id, label: stage.label, detail: stage.detail || "", status: "running" });
+    const out = await runStage({ pipeline, st, key, model, messages, deadline, guard });
+    if (out.error) {
+      send({ type: "error", error: { message: out.error.message, retryable: Boolean(out.error.retryable) } });
+      return;
+    }
+    const ctx = contextOf(st, messages);
+    const note = render(stage.note, ctx, { clip: 80 });
+    send({ type: "frome_stage", id, status: "done", note: note && clean(g, note) ? note : "" });
+
+    let rule = out.rule;
+    st.step += 1;
+    if (rule?.goto && st.step < (pipeline.max_steps || 12) && pipeline.stages[rule.goto]) {
+      st.next = rule.goto;
+      send({ type: "frome_continue", state: seal(sealKey, st) });
+      return;
+    }
+    if (!rule || rule.goto) {
+      // Ciclo sin salida definida o agotado: se entrega lo último validable, marcado.
+      rule = { deliver: "draft", signal: "Ciclo interrumpido — límite de etapas" };
+    }
+
+    // Entrega.
+    const notice = rule.deliver_text !== undefined;
+    let text = notice ? render(rule.deliver_text, ctx, { clip: 160 }) : String(getPath(ctx, rule.deliver) ?? "");
+    text = text.replace(/\n*⟶ Signal:[^\n]*\s*$/, "").trim();
+    const signal = render(rule.signal, ctx, { clip: 60 });
+    if (!text || !clean(g, text) || !clean(g, signal)) {
+      send({ type: "frome_blocked" });
+      return;
+    }
+    if (st.truncated && !notice) text += TRUNCATED_NOTE;
+    send({ type: "frome_deliver", kind: notice ? "notice" : "answer" });
+    sendText(send, text);
+    if (signal) send({ type: "frome_signal", text: signal });
+    send({ type: "frome_usage", usage: st.usage });
+    if (consent && sessionId) {
+      await recordTurn({
+        sessionId,
+        model,
+        route: "governed",
+        messages,
+        assistantText: text,
+        usage: st.usage,
+        cycle: { path: st.path, signal, withheld: notice },
+      }).catch(() => {});
+    }
+  });
 }
 
 export default async (req) => {
   if (req.method !== "POST") return json(405, { error: "method" });
+  const t0 = Date.now();
+  const deadline = t0 + BUDGET_MS;
 
   let body;
   try {
@@ -72,134 +226,46 @@ export default async (req) => {
   if (!validKey(key)) return json(400, { error: "key", message: "Clave de API de Anthropic no válida (empieza por sk-ant-)." });
 
   const model = MODELS[body.model] ? body.model : "claude-opus-5-5";
-  const wantsGoverned = body.governed !== false;
   const messages = sanitizeMessages(body.messages);
   if (!messages) return json(400, { error: "messages" });
-
-  // Ruta: baseline (sin arquitectura), governed (prompt operativo + filtro) o public.
-  let route = "baseline";
-  if (wantsGoverned) {
-    const g = await gate({ key, messages });
-    if (g.auth === false) return json(401, { error: "upstream", status: g.status, message: g.message || "Clave rechazada por el proveedor." });
-    route = g.probe ? "public" : "governed";
-  }
-  const system = route === "governed" ? governedSystem() : route === "public" ? PUBLIC_SYSTEM : UNGOVERNED_SYSTEM;
-
-  const upstream = await fetch(ANTHROPIC_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION },
-    body: JSON.stringify({ model, max_tokens: MODELS[model].max, system, messages, stream: true }),
-  });
-
-  if (!upstream.ok || !upstream.body) {
-    let detail = "";
-    try {
-      detail = (await upstream.json())?.error?.message || "";
-    } catch {}
-    // Nunca se incluye la clave en el mensaje de error.
-    return json(upstream.status === 401 ? 401 : 502, {
-      error: "upstream",
-      status: upstream.status,
-      message: detail || "El proveedor no ha respondido.",
-    });
-  }
-
   const consent = body.consent === true;
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.slice(0, 64) : null;
-  const filter = route === "governed" ? new LeakFilter(loadGovernance()) : null;
-  const enc = new TextEncoder();
-  const dec = new TextDecoder();
-  let delivered = "";
-  let usage = null;
+  const common = { key, model, messages, consent, sessionId, deadline };
 
-  // El servidor interpreta el SSE del proveedor y emite el suyo con el mismo formato
-  // de eventos, para poder retener, comprobar y cortar el texto antes de entregarlo.
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (ev) => controller.enqueue(enc.encode(`data: ${JSON.stringify(ev)}\n\n`));
-      const sendText = (text) => {
-        if (!text) return;
-        delivered += text;
-        send({ type: "content_block_delta", delta: { type: "text_delta", text } });
-      };
-      const reader = upstream.body.getReader();
-      let buf = "";
-      let blocked = false;
-      try {
-        send({ type: "frome_route", route });
-        outer: while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          let i;
-          while ((i = buf.indexOf("\n\n")) >= 0) {
-            const chunk = buf.slice(0, i);
-            buf = buf.slice(i + 2);
-            const line = chunk.split("\n").find((l) => l.startsWith("data: "));
-            if (!line) continue;
-            let ev;
-            try {
-              ev = JSON.parse(line.slice(6));
-            } catch {
-              continue;
-            }
-            if (ev.type === "message_start" && ev.message?.usage) {
-              usage = { ...ev.message.usage };
-              send({ type: "message_start", message: { usage: ev.message.usage } });
-            } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
-              if (filter) {
-                sendText(filter.push(ev.delta.text));
-                if (filter.blocked) {
-                  blocked = true;
-                  break outer;
-                }
-              } else sendText(ev.delta.text);
-            } else if (ev.type === "message_delta" && ev.usage) {
-              usage = { ...(usage || {}), ...ev.usage };
-              send({ type: "message_delta", usage: ev.usage });
-            } else if (ev.type === "error") {
-              send({ type: "error", error: { message: ev.error?.message || "error" } });
-            }
-          }
-        }
-        if (filter && !blocked) {
-          const tail = filter.end();
-          if (filter.blocked) blocked = true;
-          else sendText(mapSignals(tail));
-        }
-        if (blocked) {
-          try {
-            await reader.cancel();
-          } catch {}
-          console.warn(`shield: respuesta retenida (${filter.blocked})`);
-          send({ type: "frome_blocked" });
-        } else if (route === "public") {
-          sendText(PUBLIC_SIGNAL);
-        }
-      } catch {
-        send({ type: "error", error: { message: "Se ha interrumpido la respuesta." } });
-      } finally {
-        controller.close();
-        if (consent && sessionId && delivered && !blocked) {
-          // Fuera del camino crítico de la respuesta. Sin clave, sin IP, sin cabeceras.
-          recordTurn({ sessionId, model, route, messages, assistantText: delivered, usage }).catch(() => {});
-        }
-      }
-    },
-  });
+  if (body.governed === false) return single({ route: "baseline", ...common });
 
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      "content-type": "text/event-stream; charset=utf-8",
-      "cache-control": "no-cache, no-store",
-      "x-frome-governed": route === "baseline" ? "0" : "1",
-    },
-  });
+  const g = loadGovernance();
+  const bind = bindingOf(model, messages);
+
+  // Continuación de un ciclo en curso: el estado sellado dice qué etapa toca.
+  if (body.state !== undefined && body.state !== null) {
+    const st = unseal(g.sealKey, body.state);
+    if (!st || st.v !== 1 || st.bind !== bind || st.exp < Date.now() || !g.pipeline?.stages[st.next]) {
+      return json(409, { error: "state", message: "El ciclo de esta respuesta ha caducado. Vuelve a enviar el mensaje." });
+    }
+    return cycleStep({ g, st, ...common });
+  }
+
+  // Primer paso: clasificador de entrada y, si procede, primera etapa.
+  const verdict = await gate({ key, messages });
+  if (verdict.auth === false) {
+    return json(401, { error: "upstream", status: verdict.status, message: verdict.message || "Clave rechazada por el proveedor." });
+  }
+  if (verdict.probe) return single({ route: "public", ...common, extraUsage: verdict.usage || { input: 0, output: 0 } });
+  if (!g.pipeline) return json(500, { error: "governance", message: "La arquitectura no está disponible en este despliegue." });
+
+  const st = newState(g.pipeline, { bind, ttl: STATE_TTL_MS });
+  if (verdict.usage) {
+    st.usage.input += verdict.usage.input;
+    st.usage.output += verdict.usage.output;
+    st.usage.calls += 1;
+  }
+  return cycleStep({ g, st, ...common });
 };
 
 export const config = {
   path: "/api/chat",
-  // Límite por IP: frena el barrido automático de intentos de extracción.
-  rateLimit: { windowLimit: 30, windowSize: 60, aggregateBy: ["ip", "domain"] },
+  // Límite por IP: frena el barrido automático de intentos de extracción. Una
+  // respuesta gobernada son varias peticiones (una por etapa).
+  rateLimit: { windowLimit: 90, windowSize: 60, aggregateBy: ["ip", "domain"] },
 };

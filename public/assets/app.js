@@ -1,5 +1,5 @@
 /* FromE Chat — cliente. Sin dependencias. La conversación vive en memoria del
-   navegador; la clave, en memoria de sesión o cifrada en localStorage si el
+   navegador y no se guarda; la clave, en memoria de sesión o cifrada en localStorage si el
    usuario lo pide. Nada de esto se envía a ningún sitio salvo /api/chat. */
 (function () {
   "use strict";
@@ -11,7 +11,7 @@
     pillGov: $("pill-gov"), banner: $("banner"), cmpOff: $("btn-compare-off"),
     panes: $("panes"), paneB: $("pane-b"), threadA: $("thread-a"), threadB: $("thread-b"),
     headA: $("head-a"), metaA: $("meta-a"), metaB: $("meta-b"), empty: $("empty"),
-    form: $("composer"), input: $("input"), send: $("btn-send"), hintR: $("hint-right"), newBtn: $("btn-new"),
+    form: $("composer"), input: $("input"), send: $("btn-send"), hintR: $("hint-right"), newBtn: $("btn-new"), sid: $("sid"),
   };
 
   /* ---------- estado ---------- */
@@ -77,7 +77,6 @@
       el.model.innerHTML = "";
       for (const m of d.models) { const o = document.createElement("option"); o.value = m.id; o.textContent = m.label; el.model.appendChild(o); }
       try { const saved = localStorage.getItem("fromechat.model"); if (saved && d.models.some((m) => m.id === saved)) el.model.value = saved; } catch {}
-      el.pillGov.innerHTML = '<span class="dot"></span> From E™ activa · ' + d.openCoreModules + " módulos";
     } catch {
       el.model.innerHTML = '<option value="claude-opus-5-5">Claude Opus 5.5</option>';
     }
@@ -96,73 +95,131 @@
     if (cmp) { el.governed.checked = true; el.governed.disabled = true; el.tGov.classList.add("on"); } else { el.governed.disabled = false; }
     const gov = el.governed.checked;
     el.pillGov.classList.toggle("on", gov);
-    el.pillGov.innerHTML = gov ? '<span class="dot"></span> From E™ activa · 7 módulos' : '<span class="dot"></span> Sin arquitectura';
-    el.headA.textContent = gov ? "From E™ Open Core" : "Sin arquitectura";
-    el.hintR.textContent = cmp ? "Coste: ×2 tokens por mensaje" : "";
-    el.hintR.className = cmp ? "cost" : "";
+    el.pillGov.innerHTML = gov ? '<span class="dot"></span> From E™ activa · ciclo por etapas' : '<span class="dot"></span> Sin arquitectura';
+    el.headA.textContent = gov ? "Con From E™" : "Sin arquitectura";
+    el.hintR.textContent = gov ? (cmp ? "Coste por mensaje: el ciclo de From E™ más una llamada directa" : "Coste por mensaje: el ciclo de From E™, varias llamadas") : "";
+    el.hintR.className = gov ? "cost" : "";
+    el.sid.hidden = !el.consent.checked;
+    el.sid.textContent = "Identificador de esta sesión: " + state.sessionId;
   }
 
   /* ---------- render ---------- */
   function addMsg(thread, role, text, opts = {}) {
     const m = document.createElement("div"); m.className = "msg " + role;
     const who = document.createElement("div"); who.className = "who"; who.textContent = role === "user" ? "Tú" : (opts.label || "Modelo");
-    const body = document.createElement("div"); body.className = "body" + (opts.streaming ? " streaming" : "") + (opts.error ? " error" : "");
+    m.appendChild(who);
+    let trace = null;
+    if (opts.trace) { trace = document.createElement("ol"); trace.className = "trace"; m.appendChild(trace); }
+    const body = document.createElement("div"); body.className = "body" + (opts.streaming ? " streaming" : "");
     body.textContent = text;
-    m.appendChild(who); m.appendChild(body); thread.appendChild(body.parentNode);
+    m.appendChild(body); thread.appendChild(m);
     thread.scrollTop = thread.scrollHeight;
-    return body;
+    return { body, trace, thread };
   }
-  function finalize(body, text) {
-    body.classList.remove("streaming");
-    // Separa la línea de señal del Signal System™, si existe, para mostrarla aparte.
-    const m = text.match(/\n?(⟶ Signal:[^\n]*)\s*$/);
-    if (m) {
-      body.textContent = text.slice(0, m.index).replace(/\s+$/, "");
-      const s = document.createElement("span"); s.className = "signal"; s.textContent = m[1];
-      body.appendChild(s);
-    } else body.textContent = text;
+
+  // Traza del ciclo: una fila por etapa, con su estado y su nota.
+  function traceRow(ui, id, label, detail) {
+    if (!ui.trace) return;
+    const last = ui.trace.lastElementChild;
+    if (last && last.dataset.id === id && last.classList.contains("run")) return; // reintento de la misma etapa
+    const li = document.createElement("li"); li.className = "run"; li.dataset.id = id;
+    const b = document.createElement("b"); b.textContent = label || id; li.appendChild(b);
+    if (detail) { const d = document.createElement("span"); d.textContent = detail; li.appendChild(d); }
+    ui.trace.appendChild(li); ui.thread.scrollTop = ui.thread.scrollHeight;
+  }
+  function traceDone(ui, id, note, cls) {
+    if (!ui.trace) return;
+    const last = ui.trace.lastElementChild;
+    if (!last || last.dataset.id !== id) return;
+    last.className = cls || "ok";
+    if (note) { const n = document.createElement("em"); n.textContent = note; last.appendChild(n); }
   }
 
   /* ---------- envío ---------- */
-  async function streamOne({ governed, messages, thread, label, meta }) {
-    const body = addMsg(thread, "assistant", "", { streaming: true, label });
-    const t0 = performance.now();
-    let text = "", inTok = null, outTok = null, held = false;
-    const res = await fetch("/api/chat", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key: el.key.value.trim(), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId }),
-    });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Una petición a /api/chat. En modo gobernado ejecuta una etapa del ciclo.
+  // Devuelve { cont } si hay más etapas, { done } si hay entrega, o { error, retry }.
+  async function step({ governed, messages, token, acc, ui }) {
+    let res;
+    try {
+      res = await fetch("/api/chat", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: el.key.value.trim(), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId, state: token || undefined }),
+      });
+    } catch { return { error: "No hay conexión con el servidor.", retry: true }; }
     if (!res.ok) {
       let msg = "Error " + res.status;
       try { const e = await res.json(); if (e.message) msg = e.message; } catch {}
-      body.classList.remove("streaming"); body.classList.add("error"); body.textContent = msg;
-      throw new Error(msg);
+      if (res.status === 429) msg = "Demasiadas peticiones seguidas. Espera un minuto.";
+      return { error: msg, retry: res.status === 429 || res.status >= 500, wait: res.status === 429 ? 8000 : 0 };
     }
     const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
-    while (true) {
-      const { done, value } = await reader.read(); if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf("\n\n")) >= 0) {
-        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
-        const line = chunk.split("\n").find((l) => l.startsWith("data: ")); if (!line) continue;
-        try {
-          const ev = JSON.parse(line.slice(6));
-          if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") { text += ev.delta.text; body.textContent = text; thread.scrollTop = thread.scrollHeight; }
-          if (ev.type === "message_start" && ev.message && ev.message.usage) inTok = ev.message.usage.input_tokens + (ev.message.usage.cache_read_input_tokens || 0) + (ev.message.usage.cache_creation_input_tokens || 0);
-          if (ev.type === "message_delta" && ev.usage) outTok = ev.usage.output_tokens;
-          if (ev.type === "frome_blocked") { held = true; }
-          if (ev.type === "error") throw new Error(ev.error && ev.error.message || "error");
-        } catch (e) { if (e.message !== "error" && !(e instanceof SyntaxError)) throw e; }
+    let cont = null, done = false, err = null;
+    try {
+      while (true) {
+        const r = await reader.read(); if (r.done) break;
+        buf += dec.decode(r.value, { stream: true });
+        let i;
+        while ((i = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+          const line = chunk.split("\n").find((l) => l.startsWith("data: ")); if (!line) continue;
+          let ev; try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+          if (ev.type === "frome_route") {
+            if (!acc.route) { acc.route = ev.route; if (governed) traceDone(ui, "gate", ev.route === "public" ? "ruta pública" : ""); }
+          } else if (ev.type === "frome_stage") {
+            if (ev.status === "running") traceRow(ui, ev.id, ev.label, ev.detail); else traceDone(ui, ev.id, ev.note);
+          } else if (ev.type === "frome_continue") cont = ev.state;
+          else if (ev.type === "frome_deliver") acc.kind = ev.kind;
+          else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") {
+            acc.text += ev.delta.text; ui.body.hidden = false; ui.body.textContent = acc.text; ui.thread.scrollTop = ui.thread.scrollHeight;
+          } else if (ev.type === "frome_signal") acc.signal = ev.text;
+          else if (ev.type === "frome_usage") { acc.usage = ev.usage; done = true; }
+          else if (ev.type === "frome_truncated") acc.truncated = true;
+          else if (ev.type === "frome_blocked") { acc.held = true; done = true; }
+          else if (ev.type === "error") err = { error: (ev.error && ev.error.message) || "Error", retry: Boolean(ev.error && ev.error.retryable) };
+        }
       }
+    } catch { err = err || { error: "Se ha interrumpido la respuesta.", retry: true }; }
+    if (err) return err;
+    if (cont) return { cont };
+    if (done) return { done: true };
+    return { error: "La etapa no ha terminado a tiempo.", retry: true };
+  }
+
+  async function ask({ governed, messages, thread, label, meta }) {
+    const ui = addMsg(thread, "assistant", "", { streaming: true, label, trace: governed });
+    const acc = { text: "", signal: "", kind: "answer", held: false, truncated: false, usage: null, route: null };
+    const t0 = performance.now();
+    if (governed) { ui.body.hidden = true; traceRow(ui, "gate", "Comprobación de entrada", ""); }
+    let token = null, tries = 0;
+    for (;;) {
+      const r = await step({ governed, messages, token, acc, ui });
+      if (r.cont) { token = r.cont; tries = 0; continue; }
+      if (r.done) break;
+      // Solo se reintenta una etapa del ciclo: su estado anterior sigue siendo válido.
+      if (r.retry && governed && !acc.text && tries < 2) { tries++; await sleep(r.wait || 1500 * tries); continue; }
+      if (ui.trace && ui.trace.lastElementChild) ui.trace.lastElementChild.className = "fail";
+      ui.body.hidden = false; ui.body.classList.remove("streaming"); ui.body.classList.add("error");
+      ui.body.textContent = acc.text ? acc.text + "\n\n[" + r.error + "]" : r.error;
+      throw new Error(r.error);
     }
-    if (held) {
+    ui.body.hidden = false; ui.body.classList.remove("streaming");
+    let text = acc.text;
+    if (acc.held) {
       // El servidor ha retenido la respuesta: se descarta lo mostrado.
       text = "Respuesta retenida: lo solicitado forma parte de la configuración interna de FromE Chat y no se divulga. Puedes continuar con tu trabajo.";
-      body.classList.remove("streaming"); body.classList.add("held"); body.textContent = text;
-    } else finalize(body, text);
+      ui.body.classList.add("held");
+    } else {
+      if (acc.truncated) text += "\n\n[Respuesta cortada por el límite de tiempo de la plataforma.]";
+      if (acc.kind === "notice") ui.body.classList.add("held");
+    }
+    ui.body.textContent = text;
+    if (acc.signal && !acc.held) { const sg = document.createElement("span"); sg.className = "signal"; sg.textContent = "⟶ Signal: " + acc.signal; ui.body.appendChild(sg); }
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
-    meta.textContent = (inTok != null ? inTok + " in · " : "") + (outTok != null ? outTok + " out · " : "") + secs + " s";
+    const u = acc.usage;
+    meta.textContent = (u ? u.calls + (u.calls === 1 ? " llamada · " : " llamadas · ") + u.input + " in · " + u.output + " out · " : "") + secs + " s";
+    ui.thread.scrollTop = ui.thread.scrollHeight;
     return text;
   }
 
@@ -175,24 +232,26 @@
     const cmp = el.compare.checked, gov = el.governed.checked;
     addMsg(el.threadA, "user", text);
     state.history.push({ role: "user", content: text });
-    const jobs = [streamOne({ governed: gov, messages: state.history, thread: el.threadA, label: gov ? "From E™ Open Core" : "Sin arquitectura", meta: el.metaA })
-      .then((t) => state.history.push({ role: "assistant", content: t }))];
+    const drop = (h) => { if (h.length && h[h.length - 1].role === "user") h.pop(); };
+    const jobs = [ask({ governed: gov, messages: state.history.slice(), thread: el.threadA, label: gov ? "Con From E™" : "Sin arquitectura", meta: el.metaA })
+      .then((t) => state.history.push({ role: "assistant", content: t }), () => drop(state.history))];
     if (cmp) {
       addMsg(el.threadB, "user", text);
       state.historyB.push({ role: "user", content: text });
-      jobs.push(streamOne({ governed: false, messages: state.historyB, thread: el.threadB, label: "Sin arquitectura", meta: el.metaB })
-        .then((t) => state.historyB.push({ role: "assistant", content: t })));
+      jobs.push(ask({ governed: false, messages: state.historyB.slice(), thread: el.threadB, label: "Sin arquitectura", meta: el.metaB })
+        .then((t) => state.historyB.push({ role: "assistant", content: t }), () => drop(state.historyB)));
     }
     try { await Promise.all(jobs); }
-    catch { /* el error ya está pintado en el hilo */ state.history = state.history.filter((m, i, a) => !(i === a.length - 1 && m.role === "user")); state.historyB = state.historyB.filter((m, i, a) => !(i === a.length - 1 && m.role === "user")); }
     finally { state.busy = false; el.input.disabled = false; refreshKeyState(); el.input.focus(); }
   }
 
   function reset() {
+    if (state.busy) return;
     state.history = []; state.historyB = []; state.sessionId = cryptoId();
     el.threadA.innerHTML = ""; el.threadB.innerHTML = ""; el.metaA.textContent = ""; el.metaB.textContent = "";
-    const e = document.createElement("div"); e.className = "empty"; e.innerHTML = "<h3>Nueva conversación.</h3><p>El hilo anterior se ha descartado de tu navegador. La arquitectura sigue activa.</p>";
+    const e = document.createElement("div"); e.className = "empty"; e.innerHTML = "<h3>Nueva conversación.</h3><p>El hilo anterior se ha descartado de tu navegador. No queda guardado en ningún sitio.</p>";
     el.threadA.appendChild(e); el.empty = e;
+    syncToggles();
   }
 
   /* ---------- eventos ---------- */
