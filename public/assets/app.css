@@ -127,3 +127,4 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
   .pane{border-right:0;border-bottom:1px solid var(--line)}
   .main{min-height:70vh}
 }
+.msg .body.held{border-color:var(--line-strong);color:var(--muted);font-style:italic}

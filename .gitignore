@@ -3,6 +3,6 @@ node_modules/
 .env
 *.log
 
-# Especificaciones Open Core: se descargan en el build desde el repositorio privado.
-governance/[0-9]*.md
-governance/LICENSE-open-core
+# Prompt operativo, huellas y marcas canario: se generan en el build; nunca se versionan.
+governance/*
+!governance/README.md

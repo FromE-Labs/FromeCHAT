@@ -3,6 +3,14 @@
   publish = "public"
   functions = "netlify/functions"
 
+# En vistas previas y ramas, el prompt operativo se lee de la rama de revisión del
+# repositorio privado; en producción, de su rama principal.
+[context.deploy-preview.environment]
+  GOVERNANCE_REF = "fromechat-runtime"
+
+[context.branch-deploy.environment]
+  GOVERNANCE_REF = "fromechat-runtime"
+
 [functions]
   node_bundler = "esbuild"
   included_files = ["governance/**"]

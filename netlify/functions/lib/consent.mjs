@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 
 const STORE = "consented-sessions";
 
-export async function recordTurn({ sessionId, model, governed, messages, assistantText, usage }) {
+export async function recordTurn({ sessionId, model, route, messages, assistantText, usage }) {
   const store = getStore({ name: STORE, consistency: "strong" });
   const ts = new Date().toISOString();
   const turn = {
@@ -18,7 +18,7 @@ export async function recordTurn({ sessionId, model, governed, messages, assista
     ts,
     sessionId,
     model,
-    condition: governed ? "from-e-open-core" : "baseline",
+    condition: route === "governed" ? "from-e" : route === "public" ? "public-info" : "baseline",
     messages,
     assistant: assistantText,
     usage: usage || null,

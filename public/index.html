@@ -52,7 +52,7 @@
       <p class="lead">From E™ es una capa externa de gobernanza cognitiva para modelos de lenguaje: impone invariantes estructurales a la generación para que el resultado se mantenga coherente con un núcleo declarado, con independencia de las tendencias estadísticas del modelo. FromE Chat la aplica a cada turno de tu conversación.</p>
       <div class="cards">
         <article class="card"><div class="num">01</div><h3>Modelos de frontera</h3><p>Claude Opus, Sonnet y Fable, elegidos por ti en cada sesión. Sin modelos rebajados para abaratar: la capacidad del modelo es el techo del sistema.</p></article>
-        <article class="card"><div class="num">02</div><h3>Gobernanza en servidor</h3><p>Los módulos From E™ se componen en servidor y viajan al proveedor junto con tu mensaje. El navegador nunca ve la arquitectura; tú ves su efecto.</p></article>
+        <article class="card"><div class="num">02</div><h3>Gobernanza en servidor</h3><p>Las reglas operativas de From E™ se aplican en servidor y cada respuesta se comprueba antes de entregarse. El navegador nunca ve la arquitectura; tú ves su efecto.</p></article>
         <article class="card"><div class="num">03</div><h3>Comparador</h3><p>La misma pregunta con y sin From E™, lado a lado. Juzga la diferencia en tu propio caso, no en un ejemplo preparado. Consume el doble de tokens; se avisa antes.</p></article>
         <article class="card"><div class="num">04</div><h3>Investigación con consentimiento</h3><p>Si lo activas, tus conversaciones anonimizadas alimentan la serie de medición de From E™. Sin clave, sin correo, sin IP. Apagado por defecto.</p></article>
       </div>
@@ -65,7 +65,7 @@
     <div class="section-label">02 — Arquitectura</div>
     <div>
       <h2>Siete módulos Open Core, activos en cada turno.</h2>
-      <p class="lead">FromE Chat aplica los siete módulos públicos de la especificación From E™ v2.0 (Apache 2.0, DOI 10.5281/zenodo.19041459). Los siete módulos propietarios del Runtime comercial no forman parte de esta plataforma.</p>
+      <p class="lead">FromE Chat opera con reglas derivadas de los siete módulos de la especificación From E™ (DOI 10.5281/zenodo.19041459). La implementación operativa es propietaria y no se divulga; los módulos del Runtime comercial no forman parte de esta plataforma.</p>
       <div class="modules">
         <div><small>01</small><b>Invariant Coherence</b><span>Mide K, la coherencia de cada salida respecto al Core Vector declarado, y rechaza la deriva.</span></div>
         <div><small>02</small><b>Internal Editor™</b><span>Estructura editorialmente la entrada antes de generar.</span></div>
@@ -87,8 +87,8 @@
       <h2>Tres piezas. El núcleo no sale del servidor.</h2>
       <div class="steps">
         <div class="step"><small>01 · Tu navegador</small><b>Interfaz y clave</b><p>Pegas tu clave de API. Queda en la memoria de tu navegador (cifrada si eliges recordarla) y se envía por HTTPS solo con cada mensaje.</p></div>
-        <div class="step"><small>02 · Servidor From E™</small><b>Prompt gobernado</b><p>Compone la petición con los siete módulos, la envía al proveedor con tu clave y te devuelve la respuesta en streaming. No guarda la clave ni la conversación.</p></div>
-        <div class="step"><small>03 · Proveedor</small><b>Modelo de frontera</b><p>Anthropic ejecuta y te factura a ti, con tu clave. Las especificaciones se cachean en el proveedor para que cada turno te cueste menos.</p></div>
+        <div class="step"><small>02 · Servidor From E™</small><b>Prompt gobernado</b><p>Aplica las reglas operativas de From E™, envía la petición al proveedor con tu clave y comprueba la respuesta mientras te la entrega. No guarda la clave ni la conversación.</p></div>
+        <div class="step"><small>03 · Proveedor</small><b>Modelo de frontera</b><p>Anthropic ejecuta y te factura a ti, con tu clave. Cada mensaje incluye una comprobación de seguridad breve con un modelo rápido, de coste mínimo.</p></div>
       </div>
     </div>
   </div>

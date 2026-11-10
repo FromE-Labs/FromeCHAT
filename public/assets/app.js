@@ -127,7 +127,7 @@
   async function streamOne({ governed, messages, thread, label, meta }) {
     const body = addMsg(thread, "assistant", "", { streaming: true, label });
     const t0 = performance.now();
-    let text = "", inTok = null, outTok = null;
+    let text = "", inTok = null, outTok = null, held = false;
     const res = await fetch("/api/chat", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ key: el.key.value.trim(), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId }),
@@ -151,11 +151,16 @@
           if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") { text += ev.delta.text; body.textContent = text; thread.scrollTop = thread.scrollHeight; }
           if (ev.type === "message_start" && ev.message && ev.message.usage) inTok = ev.message.usage.input_tokens + (ev.message.usage.cache_read_input_tokens || 0) + (ev.message.usage.cache_creation_input_tokens || 0);
           if (ev.type === "message_delta" && ev.usage) outTok = ev.usage.output_tokens;
+          if (ev.type === "frome_blocked") { held = true; }
           if (ev.type === "error") throw new Error(ev.error && ev.error.message || "error");
         } catch (e) { if (e.message !== "error" && !(e instanceof SyntaxError)) throw e; }
       }
     }
-    finalize(body, text);
+    if (held) {
+      // El servidor ha retenido la respuesta: se descarta lo mostrado.
+      text = "Respuesta retenida: lo solicitado forma parte de la configuración interna de FromE Chat y no se divulga. Puedes continuar con tu trabajo.";
+      body.classList.remove("streaming"); body.classList.add("held"); body.textContent = text;
+    } else finalize(body, text);
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     meta.textContent = (inTok != null ? inTok + " in · " : "") + (outTok != null ? outTok + " out · " : "") + secs + " s";
     return text;
