@@ -167,7 +167,7 @@ function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline }
       return;
     }
     const ctx = contextOf(st, messages);
-    const note = render(stage.note, ctx, { clip: 80 });
+    const note = out.inconclusive ? String(stage.fallback_note || "no concluyente").slice(0, 80) : render(stage.note, ctx, { clip: 80 });
     send({ type: "frome_stage", id, status: "done", note: note && clean(g, note) ? note : "" });
 
     let rule = out.rule;

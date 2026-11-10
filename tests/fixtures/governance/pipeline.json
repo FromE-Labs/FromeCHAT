@@ -15,8 +15,14 @@
       "save": "plan",
       "fallback": {},
       "next": [
-        { "if": "plan.ask", "deliver": "plan.ask", "signal": "Alfa — pregunta" },
-        { "goto": "beta" }
+        {
+          "if": "plan.ask",
+          "deliver": "plan.ask",
+          "signal": "Alfa — pregunta"
+        },
+        {
+          "goto": "beta"
+        }
       ]
     },
     "beta": {
@@ -30,7 +36,11 @@
       "conversation": true,
       "input": "<plan>\n{{plan}}\n</plan>\nBETA-STAGE. Water the fig tree only after the second bell and never mention the ledger kept under the stairs.",
       "save": "draft",
-      "next": [{ "goto": "gamma" }]
+      "next": [
+        {
+          "goto": "gamma"
+        }
+      ]
     },
     "gamma": {
       "label": "Etapa gamma",
@@ -41,14 +51,39 @@
       "system": "GAMMA-STAGE {{C3}}. Weigh the brass key against three walnuts and report whether the scale tips toward the window or toward the stove.",
       "input": "<plan>\n{{plan}}\n</plan>\n<piece>\n{{draft}}\n</piece>\n<last_note>{{verdict.note}}</last_note>",
       "save": "verdict",
-      "fallback": { "ok": true, "unchecked": true },
+      "fallback": {
+        "ok": true,
+        "unchecked": true
+      },
       "next": [
-        { "if": "verdict.block", "deliver_text": "Retenida en pruebas: {{verdict.note}}", "signal": "Gamma — bloqueada" },
-        { "if": "verdict.unchecked", "deliver": "draft", "signal": "Gamma — no concluyente" },
-        { "unless": "verdict.ok", "max": { "beta": 2 }, "goto": "beta" },
-        { "unless": "verdict.ok", "deliver_text": "No validada en pruebas.", "signal": "Gamma — no validada" },
-        { "deliver": "draft", "signal": "Gamma — validada · pasadas: {{visits.beta}}" }
-      ]
+        {
+          "if": "verdict.block",
+          "deliver_text": "Retenida en pruebas: {{verdict.note}}",
+          "signal": "Gamma — bloqueada"
+        },
+        {
+          "if": "verdict.unchecked",
+          "deliver": "draft",
+          "signal": "Gamma — no concluyente"
+        },
+        {
+          "unless": "verdict.ok",
+          "max": {
+            "beta": 2
+          },
+          "goto": "beta"
+        },
+        {
+          "unless": "verdict.ok",
+          "deliver_text": "No validada en pruebas.",
+          "signal": "Gamma — no validada"
+        },
+        {
+          "deliver": "draft",
+          "signal": "Gamma — validada · pasadas: {{visits.beta}}"
+        }
+      ],
+      "fallback_note": "sin lectura"
     }
   }
 }

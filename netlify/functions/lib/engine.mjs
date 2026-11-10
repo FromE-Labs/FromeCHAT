@@ -58,15 +58,54 @@ export function tagGuard(pipeline) {
   return names.size ? new RegExp(`<(/?)(${[...names].join("|")})>`, "gi") : null;
 }
 
-// Tolerante: admite vallas de código y texto alrededor del objeto.
+// Si un objeto JSON quedó cortado (el modelo agotó su espacio), conserva lo que estaba
+// completo: corta tras el último valor cerrado y cierra las estructuras abiertas.
+export function repairJson(s) {
+  const stack = [];
+  let inStr = false;
+  let esc = false;
+  let cut = -1;
+  let cutStack = null;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{" || ch === "[") stack.push(ch);
+    else if (ch === "}" || ch === "]") {
+      stack.pop();
+      if (stack.length === 0) return s.slice(0, i + 1);
+      cut = i + 1;
+      cutStack = stack.slice();
+    }
+  }
+  if (cut < 0 || !cutStack) return null;
+  return s.slice(0, cut) + cutStack.reverse().map((c) => (c === "{" ? "}" : "]")).join("");
+}
+
+// Tolerante: admite vallas de código, texto alrededor del objeto y objetos cortados.
+// Devuelve el objeto o null. Si hubo que reparar un corte, lleva partial: true.
 export function parseJson(text) {
   const s = String(text || "");
   const a = s.indexOf("{");
+  if (a < 0) return null;
+  const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
   const b = s.lastIndexOf("}");
-  if (a < 0 || b <= a) return null;
+  if (b > a) {
+    try {
+      const v = JSON.parse(s.slice(a, b + 1));
+      if (isObj(v)) return v;
+    } catch {}
+  }
+  const fixed = repairJson(s.slice(a));
+  if (!fixed) return null;
   try {
-    const v = JSON.parse(s.slice(a, b + 1));
-    return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+    const v = JSON.parse(fixed);
+    return isObj(v) ? { ...v, partial: true } : null;
   } catch {
     return null;
   }
@@ -151,6 +190,7 @@ export async function runStage({ pipeline, st, key, model, messages, deadline, g
   account(res);
 
   let value;
+  let inconclusive = false;
   if (stage.type === "json") {
     value = parseJson(res.text);
     // Un segundo intento si el modelo no devolvió JSON y queda tiempo en esta ejecución.
@@ -161,7 +201,11 @@ export async function runStage({ pipeline, st, key, model, messages, deadline, g
         value = parseJson(res.text);
       }
     }
-    if (value === null) value = stage.fallback ?? {};
+    if (value === null) {
+      // La etapa no ha concluido: se usa su valor de reserva y queda anotado.
+      value = stage.fallback ?? {};
+      inconclusive = true;
+    }
   } else {
     value = res.text.trim();
     if (!value) return { stage, error: { message: "El modelo no ha devuelto texto.", retryable: true } };
@@ -171,5 +215,5 @@ export async function runStage({ pipeline, st, key, model, messages, deadline, g
   st.vars[stage.save || id] = value;
   st.visits[id] = (st.visits[id] || 0) + 1;
   st.path.push(id);
-  return { stage, rule: decide(stage.next, contextOf(st, messages)) };
+  return { stage, inconclusive, rule: decide(stage.next, contextOf(st, messages)) };
 }

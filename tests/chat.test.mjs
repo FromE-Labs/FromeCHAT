@@ -151,6 +151,16 @@ test("JSON ilegible: se reintenta una vez y se usa el valor de reserva de la eta
     assert.deepEqual(s.kinds(), ["gate", "alpha", "beta", "gamma", "gamma"]);
     assert.equal(c.text, "Borrador.");
     assert.equal(c.signal, "Gamma — no concluyente");
+    assert.equal(c.events.find((e) => e.type === "frome_stage" && e.status === "done" && e.id === "gamma").note, "sin lectura");
+  } finally { s.restore(); }
+});
+
+test("JSON cortado por falta de espacio: se aprovecha sin repetir la llamada", async () => {
+  const s = stub({ gamma: '{"ok":true,"why":[{"a":1},{"b":' });
+  try {
+    const c = await cycle({ key: KEY, messages: msg("hola") });
+    assert.deepEqual(s.kinds(), ["gate", "alpha", "beta", "gamma"]);
+    assert.equal(c.signal, "Gamma — validada · pasadas: 1");
   } finally { s.restore(); }
 });
 

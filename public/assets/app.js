@@ -135,6 +135,54 @@
     if (note) { const n = document.createElement("em"); n.textContent = note; last.appendChild(n); }
   }
 
+  /* ---------- formato (Markdown mínimo y seguro) ---------- */
+  // Todo el texto se escapa antes de aplicar formato: solo salen las etiquetas de aquí.
+  const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  function inline(t) {
+    const codes = [];
+    t = esc(t).replace(/`([^`\n]+)`/g, (_, c) => { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
+    t = t.replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*([^*\s][^*\n]*?)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
+    t = t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    return t.replace(/\u0000(\d+)\u0000/g, (_, i) => "<code>" + codes[Number(i)] + "</code>");
+  }
+  function md(text) {
+    const lines = text.replace(/\r/g, "").split("\n");
+    const out = []; let para = [], list = null, i = 0;
+    const flushP = () => { if (para.length) { out.push("<p>" + para.map(inline).join("<br>") + "</p>"); para = []; } };
+    const flushL = () => { if (list) { out.push("<" + list.tag + ">" + list.items.map((x) => "<li" + (x.deep ? ' class="deep"' : "") + ">" + inline(x.t) + "</li>").join("") + "</" + list.tag + ">"); list = null; } };
+    const flush = () => { flushP(); flushL(); };
+    for (; i < lines.length; i++) {
+      const ln = lines[i]; let m;
+      if (/^\s*```/.test(ln)) {
+        flush(); const buf = []; i++;
+        while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++]);
+        out.push("<pre><code>" + esc(buf.join("\n")) + "</code></pre>"); continue;
+      }
+      if (/^\s*\|.*\|\s*$/.test(ln)) {
+        flush(); const rows = [];
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(lines[i++]); i--;
+        const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+        const body = rows.filter((r) => !/^\s*\|[\s:|-]+\|\s*$/.test(r));
+        out.push('<div class="tw"><table>' + body.map((r, k) => "<tr>" + cells(r).map((c) => (k === 0 && body.length < rows.length ? "<th>" : "<td>") + inline(c) + (k === 0 && body.length < rows.length ? "</th>" : "</td>")).join("") + "</tr>").join("") + "</table></div>"); continue;
+      }
+      if ((m = ln.match(/^\s{0,3}(#{1,6})\s+(.*)$/))) { flush(); out.push("<h" + Math.min(6, m[1].length + 2) + ">" + inline(m[2].replace(/\s+#+\s*$/, "")) + "</h" + Math.min(6, m[1].length + 2) + ">"); continue; }
+      if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(ln)) { flush(); out.push("<hr>"); continue; }
+      if ((m = ln.match(/^(\s*)([-*+]|\d{1,3}[.)])\s+(.*)$/))) {
+        flushP(); const tag = /\d/.test(m[2]) ? "ol" : "ul"; const deep = m[1].length >= 2;
+        if (list && list.tag !== tag && !deep) flushL();
+        if (!list) list = { tag, items: [] };
+        list.items.push({ t: m[3], deep }); continue;
+      }
+      if ((m = ln.match(/^\s{0,3}>\s?(.*)$/))) { flush(); out.push("<blockquote>" + inline(m[1] || "") + "</blockquote>"); continue; }
+      if (!ln.trim()) { flush(); continue; }
+      if (list && /^\s{2,}\S/.test(ln)) { list.items[list.items.length - 1].t += " " + ln.trim(); continue; }
+      flushL(); para.push(ln);
+    }
+    flush();
+    return out.join("");
+  }
+  function paint(body, text) { body.classList.add("md"); body.innerHTML = md(text); }
+
   /* ---------- envío ---------- */
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -172,7 +220,8 @@
           } else if (ev.type === "frome_continue") cont = ev.state;
           else if (ev.type === "frome_deliver") acc.kind = ev.kind;
           else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") {
-            acc.text += ev.delta.text; ui.body.hidden = false; ui.body.textContent = acc.text; ui.thread.scrollTop = ui.thread.scrollHeight;
+            acc.text += ev.delta.text; ui.body.hidden = false;
+            if (!ui.raf) ui.raf = requestAnimationFrame(() => { ui.raf = 0; if (ui.body.classList.contains("streaming")) { paint(ui.body, acc.text); ui.thread.scrollTop = ui.thread.scrollHeight; } });
           } else if (ev.type === "frome_signal") acc.signal = ev.text;
           else if (ev.type === "frome_usage") { acc.usage = ev.usage; done = true; }
           else if (ev.type === "frome_truncated") acc.truncated = true;
@@ -214,7 +263,7 @@
       if (acc.truncated) text += "\n\n[Respuesta cortada por el límite de tiempo de la plataforma.]";
       if (acc.kind === "notice") ui.body.classList.add("held");
     }
-    ui.body.textContent = text;
+    if (acc.held || acc.kind === "notice") ui.body.textContent = text; else paint(ui.body, text);
     if (acc.signal && !acc.held) { const sg = document.createElement("span"); sg.className = "signal"; sg.textContent = "⟶ Signal: " + acc.signal; ui.body.appendChild(sg); }
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     const u = acc.usage;

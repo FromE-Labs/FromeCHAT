@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-const { getPath, truthy, render, parseJson, decide, conversationText, tagGuard } = await import("../netlify/functions/lib/engine.mjs");
+const { getPath, truthy, render, parseJson, repairJson, decide, conversationText, tagGuard } = await import("../netlify/functions/lib/engine.mjs");
 const { seal, unseal, bindingOf } = await import("../netlify/functions/lib/seal.mjs");
 
 test("rutas: solo propiedades propias, con length en listas", () => {
@@ -37,6 +37,16 @@ test("JSON tolerante", () => {
   assert.equal(parseJson("nada"), null);
   assert.equal(parseJson("[1,2]"), null);
   assert.equal(parseJson('{"a":'), null);
+});
+
+test("JSON cortado: se conserva lo que estaba completo y queda marcado", () => {
+  const cut = '{"revise":true,"issues":[{"kind":"claim","fix":"a } b"},{"kind":"echo","fix":"c"},{"kind":"inv';
+  assert.deepEqual(parseJson(cut), { revise: true, issues: [{ kind: "claim", fix: "a } b" }, { kind: "echo", fix: "c" }], partial: true });
+  assert.deepEqual(parseJson('```json\n{"a":[1,[2,3],{"b":"x\\"]"},{"c":'), { a: [1, [2, 3], { b: 'x"]' }], partial: true });
+  assert.equal(parseJson('{"revise":true,"issues":[{"kind":"cl'), null);
+  assert.equal(parseJson('{"ok":true,"note":"sin cerr'), null);
+  assert.equal(parseJson('{"a":1}').partial, undefined);
+  assert.equal(repairJson('{"a":{"b":1}} resto'), '{"a":{"b":1}}');
 });
 
 test("reglas: if, unless y tope de visitas, en orden", () => {
