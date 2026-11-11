@@ -4,7 +4,7 @@ Banco de pruebas abierto de la arquitectura de gobernanza From E™ sobre modelo
 
 - Sin cuenta y sin suscripción: cada usuario paga sus tokens al proveedor con su propia clave de API.
 - Comparador en el centro: el mismo mensaje y el mismo modelo, con y sin From E™, lado a lado.
-- Con From E™ activa, cada respuesta recorre en servidor un ciclo de varias llamadas y la interfaz muestra la traza de etapas.
+- Con From E™ activa, cada respuesta se genera en una llamada gobernada. El módulo opcional «Ciclo por etapas» la hace recorrer en servidor varias llamadas separadas, y la interfaz muestra la traza de etapas.
 - Módulos: el usuario enciende o apaga cada módulo de trabajo. El servidor compone el texto de cada etapa solo con los activos; sus nombres son públicos, sus textos no.
 - La arquitectura se ejecuta en servidor y nunca llega al navegador (ver «Protección de la arquitectura»).
 - La clave del usuario se usa en cada llamada al proveedor y se descarta: no se almacena ni se registra.

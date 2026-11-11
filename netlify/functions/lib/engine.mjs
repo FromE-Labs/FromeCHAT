@@ -175,16 +175,22 @@ export function stageSystem(stage, ctx) {
 export function newState(pipeline, { bind, ttl, modules = [] }) {
   const visits = {};
   for (const id of Object.keys(pipeline.stages)) visits[id] = 0;
+  const flags = computeFlags(pipeline, modules);
+  // La etapa inicial es fija o depende de los módulos activos (lista de reglas con goto).
+  const start =
+    typeof pipeline.start === "string"
+      ? pipeline.start
+      : decide(pipeline.start, { flags, modules: Object.fromEntries(modules.map((id) => [id, true])), visits })?.goto;
   return {
     v: 1,
     exp: Date.now() + ttl,
     bind,
-    next: pipeline.start,
+    next: start,
     step: 0,
     vars: {},
     visits,
     modules: Object.fromEntries(modules.map((id) => [id, true])),
-    flags: computeFlags(pipeline, modules),
+    flags,
     usage: { input: 0, output: 0, calls: 0 },
     path: [],
     truncated: false,
@@ -204,7 +210,7 @@ export async function runStage({ pipeline, st, key, model, messages, deadline, g
   const ctx = contextOf(st, messages);
   const input = render(stage.input, ctx, { guard });
   const base = stageSystem(stage, ctx);
-  const system = stage.conversation
+  const system = stage.conversation && input.trim()
     ? [{ type: "text", text: base }, { type: "text", text: input }]
     : [{ type: "text", text: base }];
   const msgs = stage.conversation ? messages : [{ role: "user", content: input }];

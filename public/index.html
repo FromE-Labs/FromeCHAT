@@ -16,7 +16,7 @@
     <a class="brand" href="/"><span>From<span style="color:var(--accent)">E</span> Chat</span> <span class="by">by From E™ Systems</span></a>
     <div class="navlinks">
       <a href="#prueba">La prueba</a>
-      <a href="#ciclo">El ciclo</a>
+      <a href="#ciclo">La arquitectura</a>
       <a href="#como-funciona">Cómo funciona</a>
       <a href="#aportacion">Tu aportación</a>
       <a href="https://frome-one.com/es/" target="_blank" rel="noopener">Servicios From E™ ONE ↗</a>
@@ -32,10 +32,10 @@
     <p class="hero-sub">La arquitectura de gobernanza From E™, puesta a prueba en abierto sobre modelos de frontera.</p>
     <div class="hero-grid">
       <div>
-        <p class="hero-copy">Planteas un caso tuyo y recibes dos respuestas del mismo modelo: una directa y otra que ha recorrido el ciclo de From E™ antes de entregarse. Juzgas la diferencia con tu criterio, no con una demostración preparada. <strong>From E™ Systems no cobra nada: conectas tu clave de API de Anthropic y pagas tu consumo al proveedor.</strong></p>
+        <p class="hero-copy">Planteas un caso tuyo y recibes dos respuestas del mismo modelo: una directa y otra gobernada por From E™. Juzgas la diferencia con tu criterio, no con una demostración preparada. <strong>From E™ Systems no cobra nada: conectas tu clave de API de Anthropic y pagas tu consumo al proveedor.</strong></p>
         <div class="hero-actions">
           <a class="btn" href="/chat/">Abrir el banco de pruebas</a>
-          <a class="btn secondary" href="#ciclo">Ver el ciclo</a>
+          <a class="btn secondary" href="#ciclo">Ver la arquitectura</a>
         </div>
       </div>
       <div class="side-note">Primera fase. No hay cuentas, ni historial, ni proyectos: cada sesión vive en tu navegador y desaparece al cerrarla. Lo que se prueba aquí es la arquitectura.</div>
@@ -51,9 +51,9 @@
       <h2>Mismo modelo, misma pregunta. Con y sin arquitectura.</h2>
       <p class="lead">From E™ es una capa externa de gobernanza cognitiva para modelos de lenguaje: impone invariantes estructurales a la generación para que el resultado se mantenga coherente con un núcleo declarado, con independencia de las tendencias estadísticas del modelo. FromE Chat la expone a quien quiera examinarla con sus propios casos.</p>
       <div class="cards">
-        <article class="card"><div class="num">01</div><h3>Comparador en el centro</h3><p>Cada mensaje se responde dos veces, lado a lado: tras el ciclo de From E™ y en una llamada directa al mismo modelo, con el mismo techo de salida. Viene activado por defecto.</p></article>
-        <article class="card"><div class="num">02</div><h3>Módulos que enciendes y apagas</h3><p>En esta beta los módulos de trabajo de la arquitectura se activan por separado. Puedes pedir solo la pregunta decisiva, o el ciclo completo, y ver qué cambia frente a la respuesta directa. La traza muestra qué etapa se ejecuta y qué ocurrió en ella.</p></article>
-        <article class="card"><div class="num">03</div><h3>Modelos de frontera</h3><p>Claude Opus, Sonnet y Fable, elegidos por ti. Todas las etapas del ciclo se ejecutan con el modelo que elijas: la capacidad del modelo es el techo del sistema.</p></article>
+        <article class="card"><div class="num">01</div><h3>Comparador en el centro</h3><p>Cada mensaje se responde dos veces, lado a lado: con From E™ y sin arquitectura, con el mismo modelo y el mismo techo de salida. Viene activado por defecto.</p></article>
+        <article class="card"><div class="num">02</div><h3>Módulos que enciendes y apagas</h3><p>En esta beta los módulos de trabajo de la arquitectura se activan por separado. Puedes pedir solo la pregunta decisiva, o todos los módulos, y ver qué cambia frente a la respuesta directa.</p></article>
+        <article class="card"><div class="num">03</div><h3>Modelos de frontera</h3><p>Claude Opus, Sonnet y Fable, elegidos por ti. La respuesta gobernada usa el modelo que elijas: la capacidad del modelo es el techo del sistema.</p></article>
         <article class="card"><div class="num">04</div><h3>Tu criterio, y tu evidencia si quieres</h3><p>El veredicto es tuyo. Si además decides aportar la sesión, pasa a la serie de medición de From E™. Apagado por defecto.</p></article>
       </div>
     </div>
@@ -62,10 +62,10 @@
 
 <section id="ciclo">
   <div class="wrap section-grid">
-    <div class="section-label">02 — El ciclo</div>
+    <div class="section-label">02 — La arquitectura</div>
     <div>
-      <h2>Una respuesta gobernada no sale en una sola llamada.</h2>
-      <p class="lead">Con From E™ activa, tu mensaje recorre en servidor el flujo operativo de la especificación (DOI 10.5281/zenodo.19041459) en varias llamadas separadas al modelo, y solo se entrega lo que supera la puerta final. En pantalla ves qué etapa se ejecuta y con qué resultado; no ves cómo está construida.</p>
+      <h2>Una llamada gobernada. El ciclo por etapas, si lo activas.</h2>
+      <p class="lead">Con From E™ activa, tu mensaje se responde en una sola llamada: el modelo aplica en esa pasada los módulos que tengas encendidos, tras una comprobación de entrada breve y con un filtro sobre lo que se entrega. Si activas el módulo «Ciclo por etapas», la respuesta recorre en servidor el flujo operativo de la especificación (DOI 10.5281/zenodo.19041459) en varias llamadas separadas, como se describe abajo, y solo se entrega lo que supera la puerta final. En pantalla ves qué se ejecuta y con qué resultado; no ves cómo está construida.</p>
       <div class="modules">
         <div><small>01</small><b>Internal Editor™</b><span>Estructura la petición antes de generar: qué se pide, qué se aporta, qué falta. Si falta un dato esencial, pregunta en lugar de suponer.</span></div>
         <div><small>02</small><b>Invariant Coherence</b><span>Fija el núcleo de la conversación y sujeta a él la generación; lo que se aparta del núcleo es deriva.</span></div>
@@ -75,7 +75,7 @@
         <div><small>06</small><b>RTN Rule</b><span>Exclusiones categóricas: silencio estructural antes que falsedad probable. Si se activa, la respuesta no se entrega.</span></div>
         <div><small>07</small><b>Core Self-Validator™</b><span>Puerta final contra el núcleo antes de la entrega.</span></div>
       </div>
-      <div class="note">Cada respuesta gobernada termina con una línea de señal (Signal System™) que compone el servidor a partir de lo que ocurrió realmente en el ciclo, no de lo que el modelo dice de sí mismo. La implementación operativa es propietaria y no se divulga; los módulos del Runtime comercial no forman parte de esta plataforma.</div>
+      <div class="note">Cada respuesta gobernada termina con una línea de señal (Signal System™) que compone el servidor a partir de lo que ocurrió realmente en el servidor, no de lo que el modelo dice de sí mismo. La implementación operativa es propietaria y no se divulga; los módulos del Runtime comercial no forman parte de esta plataforma.</div>
     </div>
   </div>
 </section>
@@ -87,8 +87,8 @@
       <h2>Tres piezas. El núcleo no sale del servidor.</h2>
       <div class="steps">
         <div class="step"><small>01 · Tu navegador</small><b>Interfaz y clave</b><p>Pegas tu clave de API. Queda en la memoria de tu navegador (cifrada si eliges recordarla) y se envía por HTTPS solo con cada petición. La conversación no se guarda.</p></div>
-        <div class="step"><small>02 · Servidor From E™</small><b>Ciclo por etapas</b><p>Ejecuta cada etapa con tu clave, guarda el estado intermedio sellado y comprueba lo que se entrega. No conserva la clave ni la conversación.</p></div>
-        <div class="step"><small>03 · Proveedor</small><b>Modelo de frontera</b><p>Anthropic ejecuta y te factura a ti. Una respuesta gobernada son varias llamadas al modelo, normalmente entre cuatro y seis, más una comprobación de entrada breve.</p></div>
+        <div class="step"><small>02 · Servidor From E™</small><b>Gobierno en servidor</b><p>Aplica la arquitectura con tu clave y comprueba lo que se entrega. No conserva la clave ni la conversación.</p></div>
+        <div class="step"><small>03 · Proveedor</small><b>Modelo de frontera</b><p>Anthropic ejecuta y te factura a ti. Una respuesta gobernada es una llamada al modelo más una comprobación de entrada breve; con el ciclo por etapas son entre cuatro y seis.</p></div>
       </div>
       <div class="note">El coste de cada respuesta queda a la vista: la interfaz muestra las llamadas realizadas y los tokens consumidos en cada lado del comparador. Los dos lados usan el mismo modelo, el mismo techo de salida y el mismo nivel de razonamiento previo, fijado al mínimo en esta fase para que cada llamada quepa en el tiempo de ejecución de la plataforma.</div>
     </div>
@@ -103,7 +103,7 @@
       <p class="lead">FromE Chat acepta claves de API de la consola de Anthropic, no cuentas de Claude. Crea una clave específica para esta plataforma y fíjale un límite: así el riesgo máximo es el tope que tú mismo decides.</p>
       <div class="steps">
         <div class="step"><small>Paso 1</small><b>Crear la clave</b><p>Entra en <code>console.anthropic.com</code>, API Keys, Create Key. Llámala <code>frome-chat</code> para reconocerla.</p></div>
-        <div class="step"><small>Paso 2</small><b>Poner un límite</b><p>En Billing, fija un límite mensual de gasto. El ciclo gobernado consume varias veces lo que una llamada directa; el límite decide cuánto quieres dedicar a la prueba.</p></div>
+        <div class="step"><small>Paso 2</small><b>Poner un límite</b><p>En Billing, fija un límite mensual de gasto. El ciclo por etapas consume varias veces lo que una llamada directa; el límite decide cuánto quieres dedicar a la prueba.</p></div>
         <div class="step"><small>Paso 3</small><b>Pegarla y empezar</b><p>Ábrela en FromE Chat, pégala en el campo de clave y elige modelo. Para revocarla, bórrala en la consola: deja de funcionar al instante.</p></div>
       </div>
       <div class="note">FromE Chat es una interfaz, no un revendedor: no vemos tu factura, no vemos tu consumo, no vemos tus conversaciones salvo que decidas aportarlas.</div>

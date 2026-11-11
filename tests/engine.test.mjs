@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-const { getPath, truthy, render, parseJson, repairJson, decide, conversationText, tagGuard } = await import("../netlify/functions/lib/engine.mjs");
+const { getPath, truthy, render, parseJson, repairJson, decide, conversationText, tagGuard, newState } = await import("../netlify/functions/lib/engine.mjs");
 const { seal, unseal, bindingOf } = await import("../netlify/functions/lib/seal.mjs");
 
 test("rutas: solo propiedades propias, con length en listas", () => {
@@ -96,4 +96,16 @@ test("módulos y banderas: selección, valores de serie y condiciones all, any y
   assert.equal(stageSystem(stage, { modules: { a: true }, flags: { algo: false } }), "BASE A $& {{PARTS}}\n\nN\n\nS FIN");
   assert.equal(stageSystem({ system: "BASE", parts: [{ when: "modules.z", text: "Z" }] }, { modules: {} }), "BASE");
   assert.equal(stageSystem({ system: "BASE", parts: [{ text: "S" }] }, {}), "BASE\n\nS");
+});
+
+test("etapa inicial según los módulos activos", () => {
+  const pipeline = {
+    start: [{ if: "flags.largo", goto: "a" }, { goto: "b" }],
+    flags: { largo: { all: ["x"] } },
+    modules: { x: {}, y: {} },
+    stages: { a: {}, b: {} },
+  };
+  assert.equal(newState(pipeline, { bind: "k", ttl: 1000, modules: ["x"] }).next, "a");
+  assert.equal(newState(pipeline, { bind: "k", ttl: 1000, modules: ["y"] }).next, "b");
+  assert.equal(newState({ ...pipeline, start: "a" }, { bind: "k", ttl: 1000, modules: [] }).next, "a");
 });

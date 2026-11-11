@@ -125,9 +125,9 @@
     if (cmp) { el.governed.checked = true; el.governed.disabled = true; el.tGov.classList.add("on"); } else { el.governed.disabled = false; }
     const gov = el.governed.checked;
     el.pillGov.classList.toggle("on", gov);
-    el.pillGov.innerHTML = gov ? '<span class="dot"></span> From E™ activa · ciclo por etapas' : '<span class="dot"></span> Sin arquitectura';
+    el.pillGov.innerHTML = gov ? '<span class="dot"></span> From E™ activa' : '<span class="dot"></span> Sin arquitectura';
     el.headA.textContent = gov ? "Con From E™" : "Sin arquitectura";
-    el.hintR.textContent = gov ? (cmp ? "Coste por mensaje: el ciclo de From E™ más una llamada directa" : "Coste por mensaje: el ciclo de From E™, varias llamadas") : "";
+    el.hintR.textContent = gov ? (cmp ? "Coste por mensaje: una llamada gobernada más una directa; con el ciclo por etapas, varias" : "Coste por mensaje: una llamada gobernada; con el ciclo por etapas, varias") : "";
     el.modsBox.classList.toggle("off", !gov);
     for (const inp of el.mods.querySelectorAll("input")) inp.disabled = !gov;
     for (const bt of el.presets.querySelectorAll("button")) bt.disabled = !gov;
@@ -257,7 +257,7 @@
           } else if (ev.type === "frome_modules") {
             if (ui.trace && !ui.trace.querySelector("li.mods")) {
               const li = document.createElement("li"); li.className = "ok mods"; li.dataset.id = "mods";
-              const b = document.createElement("b"); b.textContent = "Módulos"; const sp = document.createElement("span"); sp.textContent = ev.labels.length ? ev.labels.join(" · ") : "ninguno (ciclo base)";
+              const b = document.createElement("b"); b.textContent = "Módulos"; const sp = document.createElement("span"); sp.textContent = ev.labels.length ? ev.labels.join(" · ") : "ninguno (reglas base)";
               li.appendChild(b); li.appendChild(sp); ui.trace.insertBefore(li, ui.trace.firstChild);
             }
           } else if (ev.type === "frome_stage") {
