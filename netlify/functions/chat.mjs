@@ -14,7 +14,7 @@
 //   3. Filtro de salida. Lo que se entrega se comprueba contra todo el material
 //      propio (prompt operativo y textos de cada etapa) antes de salir.
 
-import { loadGovernance, PUBLIC_SYSTEM, UNGOVERNED_SYSTEM } from "./lib/governance.mjs";
+import { loadGovernance, PUBLIC_SYSTEM, PUBLIC_EMPTY, UNGOVERNED_SYSTEM } from "./lib/governance.mjs";
 import { LeakFilter } from "./lib/shield.mjs";
 import { gate } from "./lib/gate.mjs";
 import { recordTurn } from "./lib/consent.mjs";
@@ -142,6 +142,15 @@ async function single({ route, key, model, messages, consent, sessionId, deadlin
     if (!delivered && (r.truncated || r.stop === "max_tokens")) {
       send({ type: "error", error: { message: "El modelo no ha llegado a escribir la respuesta dentro del límite. Vuelve a enviar el mensaje.", retryable: false } });
       return;
+    }
+    if (!delivered.trim()) {
+      // Respuesta vacía sin corte ni fallo: en la ruta pública se entrega el texto fijo.
+      if (route !== "public") {
+        send({ type: "error", error: { message: "El modelo no ha devuelto texto. Vuelve a enviar el mensaje.", retryable: true } });
+        return;
+      }
+      delivered = PUBLIC_EMPTY;
+      send({ type: "content_block_delta", delta: { type: "text_delta", text: PUBLIC_EMPTY } });
     }
     if (r.truncated || r.failed || r.stop === "max_tokens") send({ type: "frome_truncated" });
     if (route === "public") send({ type: "frome_signal", text: PUBLIC_SIGNAL });

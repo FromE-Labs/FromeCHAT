@@ -10,7 +10,7 @@
 
 import { createHash, timingSafeEqual } from "node:crypto";
 import { getStore } from "@netlify/blobs";
-import { loadGovernance, PUBLIC_SYSTEM, UNGOVERNED_SYSTEM } from "./lib/governance.mjs";
+import { loadGovernance, PUBLIC_SYSTEM, PUBLIC_EMPTY, UNGOVERNED_SYSTEM } from "./lib/governance.mjs";
 import { pickModules, newState } from "./lib/engine.mjs";
 import { stepCycle } from "./lib/cycle.mjs";
 import { seal, unseal } from "./lib/seal.mjs";
@@ -174,7 +174,7 @@ export default async (req, context) => {
       if (G.route === "public") {
         if (left() < MIN_START_MS) return;
         const r = await callModel({ key, model, system: PUBLIC_SYSTEM, messages, maxTokens: MAX_OUTPUT, deadline });
-        if (r.ok) G.out = inspect(g, r.text).blocked ? { blocked: true, usage: { ...r.usage, calls: 1 } } : { text: r.text, signal: "Límite de divulgación", usage: { ...r.usage, calls: 1 }, truncated: r.truncated };
+        if (r.ok) G.out = inspect(g, r.text).blocked ? { blocked: true, usage: { ...r.usage, calls: 1 } } : { text: r.text.trim() || PUBLIC_EMPTY, signal: "Límite de divulgación" + (r.text.trim() ? "" : " · texto fijo (respuesta vacía)"), usage: { ...r.usage, calls: 1 }, truncated: r.truncated };
         else if (r.retryable && G.retries < 2) G.retries += 1;
         else G.out = { error: r.message };
         return;
@@ -205,7 +205,7 @@ export default async (req, context) => {
   }
 
   const labels = modules.map((m) => g.pipeline.modules?.[m]?.label || m);
-  const out = [`PRUEBA ${param("id") || "-"} · ${model} · módulos: ${labels.join(", ") || "ninguno"}`, `PREGUNTA: ${q}`, ""];
+  const out = [`PRUEBA ${param("id") || "-"} · ${model} · módulos: ${labels.join(", ") || "ninguno"}`, param("caso") ? `CASO: ${param("caso")}` : `PREGUNTA: ${q}`, ""];
   const G = job.gov;
   const B = job.base;
   if (G) {
