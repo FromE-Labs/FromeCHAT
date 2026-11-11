@@ -48,6 +48,21 @@ test("diagnóstico: informa de las condiciones sin devolver ningún valor", asyn
   assert.ok(!text.includes(KEY) && !text.includes(TOKEN));
 });
 
+test("admite los parámetros en la ruta, con la pregunta en base64url", async () => {
+  process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
+  const st = await (await call(`${PREVIEW}/status/${TOKEN}`, { deploy: { context: "deploy-preview" } })).text();
+  assert.ok(st.includes("consulta recibida: no") && st.includes("coincide") && !st.includes(TOKEN));
+  assert.equal((await call(`${PREVIEW}/${"x".repeat(40)}/1/m1/${Buffer.from("hola").toString("base64url")}`)).status, 404);
+  const s = stub();
+  try {
+    const r = await call(`${PREVIEW}/${TOKEN}/9/m1.m2/${Buffer.from("¿Qué hago con esto?").toString("base64url")}`);
+    const text = await r.text();
+    assert.equal(r.status, 200);
+    assert.ok(text.includes("PRUEBA 9") && text.includes("módulos: Módulo uno, Módulo dos") && text.includes("PREGUNTA: ¿Qué hago con esto?"));
+    assert.ok(text.includes("Respuesta gobernada.") && text.includes("Respuesta directa.") && !text.includes(TOKEN));
+  } finally { s.restore(); }
+});
+
 test("lanza el caso con los módulos pedidos y devuelve las dos respuestas sin la clave", async () => {
   process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
   const s = stub();

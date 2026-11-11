@@ -56,35 +56,52 @@ function isProduction(host, context) {
 
 export default async (req, context) => {
   const url = new URL(req.url);
+  // Los parámetros pueden venir en la consulta o en la ruta, porque algunos lectores
+  // no conservan la consulta:
+  //   /api/selftest/status[/<contraseña>]
+  //   /api/selftest/<contraseña>/<id>/<módulos>/<pregunta en base64url>[/<modelo>[/<lado>]]
+  // En la ruta, los módulos van separados por punto; «todos» usa los de por defecto y
+  // «ninguno» no activa ninguno.
+  const seg = url.pathname.replace(/^\/api\/selftest\/?/, "").split("/").filter(Boolean);
+  const fromPath = {};
+  if (seg[0] === "status") { fromPath.status = "1"; if (seg[1]) fromPath.t = seg[1]; }
+  else if (seg.length) {
+    [fromPath.t, fromPath.id, fromPath.m, fromPath.q, fromPath.model, fromPath.side] = seg;
+    if (fromPath.m === "todos") delete fromPath.m;
+    else if (fromPath.m === "ninguno") fromPath.m = "";
+    else if (fromPath.m) fromPath.m = fromPath.m.replace(/\./g, ",");
+    try { fromPath.q = fromPath.q ? Buffer.from(fromPath.q, "base64url").toString("utf8") : ""; } catch { fromPath.q = ""; }
+  }
+  const param = (name) => (fromPath[name] !== undefined ? fromPath[name] : url.searchParams.get(name));
   const key = (process.env.SELFTEST_KEY || "").trim();
   const token = (process.env.SELFTEST_TOKEN || "").trim();
   const prod = isProduction(url.host, context);
   // Diagnóstico sin secretos: solo dice qué condiciones se cumplen.
-  if (url.searchParams.get("status") === "1") {
-    const given = url.searchParams.get("t") || "";
-    const info = `selftest · método: ${req.method} · contexto: ${context?.deploy?.context || "desconocido"} · host: ${url.host} · producción: ${prod ? "sí" : "no"} · clave definida: ${key ? "sí" : "no"} · contraseña definida: ${token ? "sí (" + token.length + " caracteres)" : "no"} · contraseña recibida: ${given ? (token && sameToken(given, token) ? "coincide" : "no coincide (" + given.length + " caracteres)") : "ninguna"}`;
-    const json = url.searchParams.get("fmt") === "json";
+  if (param("status") === "1") {
+    const given = param("t") || "";
+    const info = `selftest · método: ${req.method} · consulta recibida: ${url.search ? "sí" : "no"} · contexto: ${context?.deploy?.context || "desconocido"} · host: ${url.host} · producción: ${prod ? "sí" : "no"} · clave definida: ${key ? "sí" : "no"} · contraseña definida: ${token ? "sí (" + token.length + " caracteres)" : "no"} · contraseña recibida: ${given ? (token && sameToken(given, token) ? "coincide" : "no coincide (" + given.length + " caracteres)") : "ninguna"}`;
+    const json = param("fmt") === "json";
     return new Response(json ? JSON.stringify({ status: info }) : info, {
       status: 200,
       headers: { "content-type": json ? "application/json; charset=utf-8" : "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
   }
-  const allowed = Boolean(key && token && !prod && sameToken(url.searchParams.get("t") || "", token));
+  const allowed = Boolean(key && token && !prod && sameToken(param("t") || "", token));
   // Algunos lectores preguntan antes con HEAD: se contesta sin ejecutar nada.
   if (req.method === "HEAD" && allowed) return new Response(null, { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
   if (req.method !== "GET" || !allowed) return gone();
 
-  const q = (url.searchParams.get("q") || "").slice(0, 8000).trim();
+  const q = (param("q") || "").slice(0, 8000).trim();
   if (!q) return new Response("Falta q", { status: 400 });
   if (!(await underCap())) return new Response("Tope diario de pruebas alcanzado.", { status: 429 });
 
   const t0 = Date.now();
   const deadline = t0 + BUDGET_MS;
   const g = loadGovernance();
-  const model = MODELS[url.searchParams.get("model")] ? url.searchParams.get("model") : "claude-opus-5-5";
-  const mParam = url.searchParams.get("m");
+  const model = MODELS[param("model")] ? param("model") : "claude-opus-5-5";
+  const mParam = param("m") ?? null;
   const modules = pickModules(g.pipeline, mParam === null ? undefined : mParam.split(",").map((x) => x.trim()).filter(Boolean));
-  const side = url.searchParams.get("side") || "both";
+  const side = param("side") || "both";
   const messages = [{ role: "user", content: q }];
 
   const governed = async () => {
@@ -112,7 +129,7 @@ export default async (req, context) => {
   const [gov, base] = await Promise.all([side === "base" ? null : governed(), side === "gov" ? null : baseline()]);
 
   const labels = modules.map((m) => g.pipeline.modules?.[m]?.label || m);
-  const out = [`PRUEBA ${url.searchParams.get("id") || "-"} · ${model} · módulos: ${labels.join(", ") || "ninguno"}`, `PREGUNTA: ${q}`, ""];
+  const out = [`PRUEBA ${param("id") || "-"} · ${model} · módulos: ${labels.join(", ") || "ninguno"}`, `PREGUNTA: ${q}`, ""];
   if (gov) {
     out.push(`=== CON FROM E · ruta ${gov.route || "-"} · ${gov.usage ? line(gov.usage) : "-"} · ${(gov.ms / 1000).toFixed(1)} s`);
     if (gov.stages?.length) out.push("TRAZA: " + gov.stages.map((x) => x.label + (x.note ? ` [${x.note}]` : "")).join(" > "));
@@ -132,4 +149,4 @@ export default async (req, context) => {
 };
 
 // Sin regla de frecuencia propia: la protegen la contraseña y el tope diario.
-export const config = { path: ["/api/selftest", "/api/probe"] };
+export const config = { path: ["/api/selftest", "/api/selftest/*"] };

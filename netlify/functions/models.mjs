@@ -2,22 +2,7 @@ import { MODELS } from "./chat.mjs";
 import { loadGovernance } from "./lib/governance.mjs";
 
 // Datos públicos para la interfaz: modelos y nombre de cada módulo. Nunca sus textos.
-export default async (req, context) => {
-  // TEMPORAL (diagnóstico de la entrada de pruebas; se retira al resolverlo): fuera de
-  // producción, ?diag=1 consulta el estado de /api/selftest desde el propio servidor.
-  const u = new URL(req.url);
-  if (u.searchParams.get("diag") === "1" && context?.deploy?.context !== "production") {
-    let seen;
-    try {
-      const r = await fetch(`${u.origin}/api/selftest?status=1&fmt=json`, { signal: AbortSignal.timeout(8000) });
-      seen = { http: r.status, type: r.headers.get("content-type"), body: (await r.text()).slice(0, 600) };
-    } catch (e) {
-      seen = { error: String(e?.message || e).slice(0, 200) };
-    }
-    return new Response(JSON.stringify({ diag: { origin: u.origin, context: context?.deploy?.context || null, selftest: seen } }), {
-      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=5" },
-    });
-  }
+export default async () => {
   let modules = [];
   let presets = [];
   try {
