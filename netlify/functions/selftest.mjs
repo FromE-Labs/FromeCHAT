@@ -60,14 +60,17 @@ export default async (req, context) => {
   const token = (process.env.SELFTEST_TOKEN || "").trim();
   const prod = isProduction(url.host, context);
   // Diagnóstico sin secretos: solo dice qué condiciones se cumplen.
-  if (req.method === "GET" && url.searchParams.get("status") === "1") {
+  if (url.searchParams.get("status") === "1") {
     const given = url.searchParams.get("t") || "";
     return new Response(
-      `selftest · contexto: ${context?.deploy?.context || "desconocido"} · host: ${url.host} · producción: ${prod ? "sí" : "no"} · clave definida: ${key ? "sí" : "no"} · contraseña definida: ${token ? "sí (" + token.length + " caracteres)" : "no"} · contraseña recibida: ${given ? (token && sameToken(given, token) ? "coincide" : "no coincide (" + given.length + " caracteres)") : "ninguna"}`,
+      `selftest · método: ${req.method} · contexto: ${context?.deploy?.context || "desconocido"} · host: ${url.host} · producción: ${prod ? "sí" : "no"} · clave definida: ${key ? "sí" : "no"} · contraseña definida: ${token ? "sí (" + token.length + " caracteres)" : "no"} · contraseña recibida: ${given ? (token && sameToken(given, token) ? "coincide" : "no coincide (" + given.length + " caracteres)") : "ninguna"}`,
       { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } }
     );
   }
-  if (req.method !== "GET" || !key || !token || prod || !sameToken(url.searchParams.get("t") || "", token)) return gone();
+  const allowed = Boolean(key && token && !prod && sameToken(url.searchParams.get("t") || "", token));
+  // Algunos lectores preguntan antes con HEAD: se contesta sin ejecutar nada.
+  if (req.method === "HEAD" && allowed) return new Response(null, { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  if (req.method !== "GET" || !allowed) return gone();
 
   const q = (url.searchParams.get("q") || "").slice(0, 8000).trim();
   if (!q) return new Response("Falta q", { status: 400 });
