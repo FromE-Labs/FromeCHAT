@@ -166,3 +166,15 @@ export function heuristicProbe(text) {
   const soft = softNorm(text);
   return PROBE_PATTERNS.some((re) => re.test(soft));
 }
+
+// Informe del filtro sobre un texto completo: motivo de bloqueo (o null) y cuántos
+// grupos de huella aparecen. Lo usa la entrada de pruebas para dar una medida objetiva.
+export function inspect(g, text) {
+  const f = new LeakFilter(g);
+  f.push(text);
+  f.end();
+  const soft = ` ${softNorm(text)} `;
+  let hits = 0;
+  for (const grp of f.groups) if (grp.some((p) => soft.includes(p))) hits++;
+  return { blocked: f.blocked, hits, threshold: f.threshold };
+}

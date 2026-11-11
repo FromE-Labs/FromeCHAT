@@ -14,6 +14,7 @@ const REF = process.env.GOVERNANCE_REF || "main";
 const TOKEN = process.env.GOVERNANCE_TOKEN;
 const OUT = new URL("../governance/", import.meta.url);
 const FILES = ["runtime.md", "pipeline.json", "fingerprints.json"];
+const OPTIONAL = ["cases.json"]; // casos de la entrada de pruebas; si no está, se sigue
 
 // Palabra inventada y pronunciable: sobrevive a una traducción como si fuera un nombre propio.
 function canaryWord() {
@@ -41,6 +42,10 @@ async function main() {
         process.exit(1);
       }
       await writeFile(new URL(f, OUT), await r.text(), "utf8");
+    }
+    for (const f of OPTIONAL) {
+      const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${PATH}/${f}?ref=${encodeURIComponent(REF)}`, { headers });
+      if (r.ok) await writeFile(new URL(f, OUT), await r.text(), "utf8");
     }
     console.log(`governance: ${FILES.length} archivos descargados de ${REPO}@${REF}.`);
   }

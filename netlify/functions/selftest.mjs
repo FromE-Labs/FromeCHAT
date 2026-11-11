@@ -14,6 +14,7 @@ import { loadGovernance, PUBLIC_SYSTEM, UNGOVERNED_SYSTEM } from "./lib/governan
 import { pickModules, newState } from "./lib/engine.mjs";
 import { stepCycle } from "./lib/cycle.mjs";
 import { seal, unseal } from "./lib/seal.mjs";
+import { inspect } from "./lib/shield.mjs";
 import { callModel } from "./lib/anthropic.mjs";
 import { gate } from "./lib/gate.mjs";
 import { MODELS } from "./chat.mjs";
@@ -94,7 +95,9 @@ export default async (req, context) => {
     if (fromPath.m === "todos") delete fromPath.m;
     else if (fromPath.m === "ninguno") fromPath.m = "";
     else if (fromPath.m) fromPath.m = fromPath.m.replace(/\./g, ",");
-    try { fromPath.q = fromPath.q ? Buffer.from(fromPath.q, "base64url").toString("utf8") : ""; } catch { fromPath.q = ""; }
+    // La pregunta va en base64url o como «caso.<nombre>», que se busca en los casos guardados.
+    if (/^caso\./.test(fromPath.q || "")) { fromPath.caso = fromPath.q.slice(5); fromPath.q = ""; }
+    else try { fromPath.q = fromPath.q ? Buffer.from(fromPath.q, "base64url").toString("utf8") : ""; } catch { fromPath.q = ""; }
   }
   const param = (name) => (fromPath[name] !== undefined ? fromPath[name] : url.searchParams.get(name));
   const key = (process.env.SELFTEST_KEY || "").trim();
@@ -115,11 +118,12 @@ export default async (req, context) => {
   if (req.method === "HEAD" && allowed) return new Response(null, { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
   if (req.method !== "GET" || !allowed) return gone();
 
-  const q = (param("q") || "").slice(0, 8000).trim();
-  if (!q) return new Response("Falta q", { status: 400 });
+  const g = loadGovernance();
+  let q = (param("q") || "").slice(0, 8000).trim();
+  if (param("caso")) q = String(g.cases?.[param("caso")] || "").trim();
+  if (!q) return new Response("Falta la pregunta o el caso no existe.", { status: 400 });
   const t0 = Date.now();
   const deadline = t0 + BUDGET_MS;
-  const g = loadGovernance();
   const model = MODELS[param("model")] ? param("model") : "claude-opus-5-5";
   const mParam = param("m") ?? null;
   const modules = pickModules(g.pipeline, mParam === null ? undefined : mParam.split(",").map((x) => x.trim()).filter(Boolean));
@@ -170,7 +174,7 @@ export default async (req, context) => {
       if (G.route === "public") {
         if (left() < MIN_START_MS) return;
         const r = await callModel({ key, model, system: PUBLIC_SYSTEM, messages, maxTokens: MAX_OUTPUT, deadline });
-        if (r.ok) G.out = { text: r.text, signal: "Límite de divulgación", usage: { ...r.usage, calls: 1 }, truncated: r.truncated };
+        if (r.ok) G.out = inspect(g, r.text).blocked ? { blocked: true, usage: { ...r.usage, calls: 1 } } : { text: r.text, signal: "Límite de divulgación", usage: { ...r.usage, calls: 1 }, truncated: r.truncated };
         else if (r.retryable && G.retries < 2) G.retries += 1;
         else G.out = { error: r.message };
         return;
@@ -212,14 +216,17 @@ export default async (req, context) => {
     if (!G.out) out.push("EN CURSO");
     else if (G.out.error) out.push("ERROR: " + G.out.error);
     else if (G.out.blocked) out.push("RETENIDA POR EL FILTRO DE SALIDA");
-    else out.push("SEÑAL: " + G.out.signal + (G.out.truncated ? " · CORTADA" : ""), "--- respuesta", G.out.text);
+    else {
+      const f = inspect(g, G.out.text);
+      out.push("SEÑAL: " + G.out.signal + (G.out.truncated ? " · CORTADA" : ""), `FILTRO: ${f.blocked ? "bloquearía (" + f.blocked + ")" : "limpio"} · huellas ${f.hits}/${f.threshold} · ${G.out.text.length} caracteres`, "--- respuesta", G.out.text);
+    }
     out.push("");
   }
   if (B) {
     out.push(`=== SIN ARQUITECTURA · ${B.out?.usage ? line(B.out.usage) : "-"} · ${(B.ms / 1000).toFixed(1)} s`);
     if (!B.out) out.push("EN CURSO");
     else if (B.out.error) out.push("ERROR: " + B.out.error);
-    else out.push((B.out.truncated ? "CORTADA\n" : "") + "--- respuesta", B.out.text);
+    else out.push((B.out.truncated ? "CORTADA\n" : "") + `${B.out.text.length} caracteres`, "--- respuesta", B.out.text);
     out.push("");
   }
   out.push(finished(job) ? "=== FIN" : "=== EN CURSO · vuelve a pedirlo con otro número al final de la ruta");

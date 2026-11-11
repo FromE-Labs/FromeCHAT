@@ -80,6 +80,17 @@ test("si la plataforma deja seguir tras responder, contesta «en curso» y luego
   } finally { s.restore(); }
 });
 
+test("la pregunta puede venir por nombre de caso guardado; informa del filtro", async () => {
+  process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
+  assert.equal((await call(`${PREVIEW}/${TOKEN}/31/m1.m2/caso.noexiste`)).status, 400);
+  const s = stub();
+  try {
+    const text = await (await call(`${PREVIEW}/${TOKEN}/31/m1.m2/caso.uno/x/gov`)).text();
+    assert.ok(text.includes("PREGUNTA: pregunta guardada del caso uno"));
+    assert.ok(/FILTRO: limpio · huellas 0\/\d+ · \d+ caracteres/.test(text) && !text.includes("SIN ARQUITECTURA"));
+  } finally { s.restore(); }
+});
+
 test("lanza el caso con los módulos pedidos y devuelve las dos respuestas sin la clave", async () => {
   process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
   const s = stub();

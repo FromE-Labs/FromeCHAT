@@ -74,6 +74,7 @@ export function loadGovernance() {
     pipeline,
     guard: pipeline ? tagGuard(pipeline) : null,
     sealKey,
+    cases: readJson(dir, "cases.json", {}), // casos de la entrada de pruebas, si los hay
     shingles: buildShingles(protectedTexts.join("\n\n")),
   };
   return cache;
