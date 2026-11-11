@@ -59,6 +59,14 @@ esos tokens cuentan dentro de cada llamada. En esta fase todas las llamadas, la 
 ciclo, piden el nivel mínimo de razonamiento previo (`output_config.effort`, variable `MODEL_EFFORT`,
 por defecto `low`). Si un modelo rechaza el parámetro, la llamada se repite sin él.
 
+## Entrada de pruebas
+
+`/api/selftest` lanza un caso (mensaje y módulos) en servidor y devuelve en texto plano la
+respuesta gobernada y la directa. Solo existe en vistas previas y ramas, nunca en producción, y
+solo si están definidas `SELFTEST_KEY` (clave de API de quien prueba, marcada como secreta) y
+`SELFTEST_TOKEN` (contraseña de la entrada, que debe venir en `?t=`). Sin eso responde 404. Tiene
+tope diario (`SELFTEST_DAILY_CAP`, 80 por defecto). Para retirarla basta con borrar las variables.
+
 ## Desarrollo local
 
 ```bash
