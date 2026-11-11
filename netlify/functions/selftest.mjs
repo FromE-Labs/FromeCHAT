@@ -46,19 +46,28 @@ async function underCap() {
 
 const line = (u) => `${u.calls ?? 1} llamadas · ${u.input} in · ${u.output} out`;
 
-export default async (req) => {
+// Producción se reconoce por el contexto del despliegue; si la plataforma no lo da,
+// por el nombre del host. Además, la clave solo tiene valor en vistas previas.
+function isProduction(host, context) {
+  const ctx = context?.deploy?.context;
+  if (ctx) return ctx === "production";
+  return !previewHost(host);
+}
+
+export default async (req, context) => {
   const url = new URL(req.url);
   const key = (process.env.SELFTEST_KEY || "").trim();
   const token = (process.env.SELFTEST_TOKEN || "").trim();
-  // Diagnóstico sin secretos: solo dice qué condiciones se cumplen, y solo fuera de producción.
-  if (req.method === "GET" && url.searchParams.get("status") === "1" && previewHost(url.host)) {
+  const prod = isProduction(url.host, context);
+  // Diagnóstico sin secretos: solo dice qué condiciones se cumplen.
+  if (req.method === "GET" && url.searchParams.get("status") === "1") {
     const given = url.searchParams.get("t") || "";
     return new Response(
-      `selftest · vista previa: sí · clave definida: ${key ? "sí" : "no"} · contraseña definida: ${token ? "sí (" + token.length + " caracteres)" : "no"} · contraseña recibida: ${given ? (sameToken(given, token) ? "coincide" : "no coincide (" + given.length + " caracteres)") : "ninguna"}`,
+      `selftest · contexto: ${context?.deploy?.context || "desconocido"} · host: ${url.host} · producción: ${prod ? "sí" : "no"} · clave definida: ${key ? "sí" : "no"} · contraseña definida: ${token ? "sí (" + token.length + " caracteres)" : "no"} · contraseña recibida: ${given ? (token && sameToken(given, token) ? "coincide" : "no coincide (" + given.length + " caracteres)") : "ninguna"}`,
       { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } }
     );
   }
-  if (req.method !== "GET" || !key || !token || !previewHost(url.host) || !sameToken(url.searchParams.get("t") || "", token)) return gone();
+  if (req.method !== "GET" || !key || !token || prod || !sameToken(url.searchParams.get("t") || "", token)) return gone();
 
   const q = (url.searchParams.get("q") || "").slice(0, 8000).trim();
   if (!q) return new Response("Falta q", { status: 400 });

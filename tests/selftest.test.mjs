@@ -26,7 +26,7 @@ function stub() {
   };
   return { keys, restore: () => (globalThis.fetch = real) };
 }
-const call = (url) => selftest(new Request(url));
+const call = (url, ctx) => selftest(new Request(url), ctx);
 
 test("no existe sin configurar, con contraseña mala o en producción", async () => {
   delete process.env.SELFTEST_KEY; delete process.env.SELFTEST_TOKEN;
@@ -37,6 +37,15 @@ test("no existe sin configurar, con contraseña mala o en producción", async ()
   assert.equal((await call(`https://sitio.netlify.app/api/selftest?t=${TOKEN}&q=hola`)).status, 404);
   assert.equal((await call(`https://chat.ejemplo.com/api/selftest?t=${TOKEN}&q=hola`)).status, 404);
   assert.equal((await selftest(new Request(`${PREVIEW}?t=${TOKEN}&q=hola`, { method: "POST" }))).status, 404);
+  // El contexto del despliegue manda sobre el nombre del host.
+  assert.equal((await call(`${PREVIEW}?t=${TOKEN}&q=hola`, { deploy: { context: "production" } })).status, 404);
+});
+
+test("diagnóstico: informa de las condiciones sin devolver ningún valor", async () => {
+  process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
+  const text = await (await call(`https://interno.ejemplo/api/selftest?status=1&t=${TOKEN}`, { deploy: { context: "deploy-preview" } })).text();
+  assert.ok(text.includes("contexto: deploy-preview") && text.includes("producción: no") && text.includes("coincide"));
+  assert.ok(!text.includes(KEY) && !text.includes(TOKEN));
 });
 
 test("lanza el caso con los módulos pedidos y devuelve las dos respuestas sin la clave", async () => {
