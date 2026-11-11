@@ -195,6 +195,10 @@ function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline }
     text = text.replace(/\n*⟶ Signal:[^\n]*\s*$/, "").trim();
     const signal = render(rule.signal, ctx, { clip: 60 });
     if (!text) {
+      // Solo nombres de campo, nunca contenido: sirve para diagnosticar sin registrar la conversación.
+      const root = String(rule.deliver || "").split(".")[0];
+      const got = ctx[root] && typeof ctx[root] === "object" ? Object.keys(ctx[root]).join(",") : typeof ctx[root];
+      console.warn(`ciclo: entrega vacía en ${id} (${rule.deliver || "texto"}); campos recibidos: ${got}`);
       send({ type: "error", error: { message: "El ciclo no ha producido respuesta. Vuelve a enviar el mensaje.", retryable: false } });
       return;
     }

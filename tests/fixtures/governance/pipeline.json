@@ -22,6 +22,14 @@
         },
         {
           "if": "flags.solo",
+          "unless": "plan.q",
+          "max": {
+            "alpha": 2
+          },
+          "goto": "alpha"
+        },
+        {
+          "if": "flags.solo",
           "deliver": "plan.q",
           "signal": "Alfa — solo"
         },

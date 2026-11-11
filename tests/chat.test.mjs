@@ -409,10 +409,17 @@ test("módulos: quedan fijados en el estado sellado y no se pueden cambiar a mit
   } finally { s.restore(); }
 });
 
-test("módulos: un ciclo sin texto que entregar devuelve un error, no un aviso de retención", async () => {
-  const s = stub({ alpha: '{"otra":"cosa"}' });
+test("módulos: si la etapa no trae lo que hay que entregar, se repite una vez antes de dar error", async () => {
+  let s = stub({ alpha: (n) => (n === 1 ? '{"otra":"cosa"}' : '{"q":"¿Cuál es la fecha límite?"}') });
   try {
     const c = await cycle({ key: KEY, messages: msg("hola"), modules: ["m1"] });
+    assert.deepEqual(s.kinds(), ["gate", "alpha", "alpha"]);
+    assert.equal(c.text, "¿Cuál es la fecha límite?");
+  } finally { s.restore(); }
+  s = stub({ alpha: '{"otra":"cosa"}' });
+  try {
+    const c = await cycle({ key: KEY, messages: msg("hola"), modules: ["m1"] });
+    assert.deepEqual(s.kinds(), ["gate", "alpha", "alpha"]);
     assert.ok(c.events.find((e) => e.type === "error").error.message.includes("no ha producido respuesta"));
     assert.ok(!c.events.some((e) => e.type === "frome_blocked"));
   } finally { s.restore(); }
