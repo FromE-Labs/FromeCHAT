@@ -63,6 +63,23 @@ test("admite los parámetros en la ruta, con la pregunta en base64url", async ()
   } finally { s.restore(); }
 });
 
+test("si la plataforma deja seguir tras responder, contesta «en curso» y luego el resultado", async () => {
+  process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
+  const s = stub();
+  try {
+    const q = Buffer.from("caso reanudable").toString("base64url");
+    let pending = null;
+    const ctx = { deploy: { context: "deploy-preview" }, waitUntil: (p) => (pending = p) };
+    const first = await (await call(`${PREVIEW}/${TOKEN}/21/m1.m2/${q}/-/-/1`, ctx)).text();
+    assert.ok(first.includes("EN CURSO") && !first.includes("=== FIN"));
+    await pending;
+    const calls = s.keys.length;
+    const second = await (await call(`${PREVIEW}/${TOKEN}/21/m1.m2/${q}/-/-/2`, ctx)).text();
+    assert.ok(second.includes("Respuesta gobernada.") && second.includes("Respuesta directa.") && second.trim().endsWith("=== FIN"));
+    assert.equal(s.keys.length, calls, "el caso terminado no se vuelve a ejecutar");
+  } finally { s.restore(); }
+});
+
 test("lanza el caso con los módulos pedidos y devuelve las dos respuestas sin la clave", async () => {
   process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
   const s = stub();

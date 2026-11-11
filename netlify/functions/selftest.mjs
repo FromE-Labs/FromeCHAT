@@ -8,16 +8,18 @@
 //   - la petición trae esa contraseña.
 // En cualquier otro caso responde 404, como si no existiera.
 
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { getStore } from "@netlify/blobs";
 import { loadGovernance, PUBLIC_SYSTEM, UNGOVERNED_SYSTEM } from "./lib/governance.mjs";
-import { pickModules } from "./lib/engine.mjs";
-import { runCycle } from "./lib/cycle.mjs";
+import { pickModules, newState } from "./lib/engine.mjs";
+import { stepCycle } from "./lib/cycle.mjs";
+import { seal, unseal } from "./lib/seal.mjs";
 import { callModel } from "./lib/anthropic.mjs";
 import { gate } from "./lib/gate.mjs";
 import { MODELS } from "./chat.mjs";
 
-const BUDGET_MS = Number(process.env.SELFTEST_BUDGET_MS) || 55000;
+const BUDGET_MS = Number(process.env.SELFTEST_BUDGET_MS) || 52000;
+const MIN_START_MS = 25000; // no se empieza una llamada con menos tiempo que este
 const DAILY_CAP = Number(process.env.SELFTEST_DAILY_CAP) || 80;
 const MAX_OUTPUT = 3000;
 const gone = () => new Response("Not found", { status: 404 });
@@ -45,6 +47,28 @@ async function underCap() {
 }
 
 const line = (u) => `${u.calls ?? 1} llamadas · ${u.input} in · ${u.output} out`;
+
+// Un caso es un trabajo reanudable. Una respuesta gobernada completa no cabe en una
+// sola ejecución de la plataforma, así que cada petición avanza lo que le da tiempo,
+// guarda el estado sellado y la siguiente continúa donde quedó.
+const mem = new Map(); // reserva si el almacén no está disponible
+const jobStore = () => getStore({ name: "selftest", consistency: "strong" });
+async function loadJob(g, id) {
+  try {
+    const raw = await jobStore().get("job-" + id);
+    return raw ? unseal(g.sealKey, raw) : null;
+  } catch {
+    return mem.get(id) || null;
+  }
+}
+async function saveJob(g, id, job) {
+  try {
+    await jobStore().set("job-" + id, seal(g.sealKey, job));
+  } catch {
+    mem.set(id, job);
+  }
+}
+const finished = (job) => (!job.gov || Boolean(job.gov.out)) && (!job.base || Boolean(job.base.out));
 
 // Producción se reconoce por el contexto del despliegue; si la plataforma no lo da,
 // por el nombre del host. Además, la clave solo tiene valor en vistas previas.
@@ -93,58 +117,112 @@ export default async (req, context) => {
 
   const q = (param("q") || "").slice(0, 8000).trim();
   if (!q) return new Response("Falta q", { status: 400 });
-  if (!(await underCap())) return new Response("Tope diario de pruebas alcanzado.", { status: 429 });
-
   const t0 = Date.now();
   const deadline = t0 + BUDGET_MS;
   const g = loadGovernance();
   const model = MODELS[param("model")] ? param("model") : "claude-opus-5-5";
   const mParam = param("m") ?? null;
   const modules = pickModules(g.pipeline, mParam === null ? undefined : mParam.split(",").map((x) => x.trim()).filter(Boolean));
-  const side = param("side") || "both";
+  const side = ["gov", "base"].includes(param("side")) ? param("side") : "both";
   const messages = [{ role: "user", content: q }];
+  const jobId = createHash("sha256").update([param("id") || "", model, modules.join(","), side, q].join("\n")).digest("hex").slice(0, 32);
 
-  const governed = async () => {
-    const s = Date.now();
-    const verdict = await gate({ key, messages });
-    if (verdict.auth === false) return { error: "Clave rechazada por el proveedor.", ms: Date.now() - s };
-    if (verdict.probe) {
-      const r = await callModel({ key, model, system: PUBLIC_SYSTEM, messages, maxTokens: MAX_OUTPUT, deadline });
-      return r.ok ? { route: "public", text: r.text, signal: "Límite de divulgación", stages: [], usage: { ...r.usage, calls: 2 }, ms: Date.now() - s } : { error: r.message, ms: Date.now() - s };
-    }
-    const out = await runCycle({ g, key, model, messages, modules, deadline });
-    if (verdict.usage && out.usage) {
-      out.usage.input += verdict.usage.input;
-      out.usage.output += verdict.usage.output;
-      out.usage.calls += 1;
-    }
-    return { route: "governed", ...out, ms: Date.now() - s };
-  };
-  const baseline = async () => {
+  let job = await loadJob(g, jobId);
+  if (!job) {
+    if (!(await underCap())) return new Response("Tope diario de pruebas alcanzado.", { status: 429 });
+    job = {
+      v: 1,
+      lease: 0,
+      gov: side === "base" ? null : { gate: false, gateUsage: null, route: null, st: null, stages: [], out: null, ms: 0, retries: 0 },
+      base: side === "gov" ? null : { out: null, ms: 0, retries: 0 },
+    };
+  }
+
+  let chain = Promise.resolve();
+  const save = () => (chain = chain.then(() => saveJob(g, jobId, job)));
+  const left = () => deadline - Date.now();
+
+  const advanceBase = async () => {
+    const B = job.base;
+    if (left() < MIN_START_MS) return;
     const s = Date.now();
     const r = await callModel({ key, model, system: UNGOVERNED_SYSTEM, messages, maxTokens: MAX_OUTPUT, deadline });
-    return r.ok ? { text: r.text, usage: { ...r.usage, calls: 1 }, truncated: r.truncated, ms: Date.now() - s } : { error: r.message, ms: Date.now() - s };
+    B.ms += Date.now() - s;
+    if (r.ok) B.out = { text: r.text, usage: { ...r.usage, calls: 1 }, truncated: r.truncated };
+    else if (r.retryable && B.retries < 2) B.retries += 1;
+    else B.out = { error: r.message };
+    await save();
   };
 
-  const [gov, base] = await Promise.all([side === "base" ? null : governed(), side === "gov" ? null : baseline()]);
+  const advanceGov = async () => {
+    const G = job.gov;
+    let mark = Date.now();
+    const clock = () => { G.ms += Date.now() - mark; mark = Date.now(); };
+    try {
+      if (!G.gate) {
+        const verdict = await gate({ key, messages });
+        G.gate = true;
+        G.gateUsage = verdict.usage || null;
+        if (verdict.auth === false) { G.out = { error: "Clave rechazada por el proveedor." }; return; }
+        G.route = verdict.probe ? "public" : "governed";
+        await save();
+      }
+      if (G.route === "public") {
+        if (left() < MIN_START_MS) return;
+        const r = await callModel({ key, model, system: PUBLIC_SYSTEM, messages, maxTokens: MAX_OUTPUT, deadline });
+        if (r.ok) G.out = { text: r.text, signal: "Límite de divulgación", usage: { ...r.usage, calls: 1 }, truncated: r.truncated };
+        else if (r.retryable && G.retries < 2) G.retries += 1;
+        else G.out = { error: r.message };
+        return;
+      }
+      if (!G.st) G.st = newState(g.pipeline, { bind: "selftest", ttl: 0, modules });
+      while (left() >= MIN_START_MS) {
+        const res = await stepCycle({ g, key, model, messages, st: G.st, stages: G.stages, deadline });
+        if (res?.error && res.retryable && G.retries < 3) { G.retries += 1; continue; }
+        if (res) { G.out = { ...res, usage: { ...G.st.usage } }; return; }
+        clock();
+        await save();
+      }
+    } finally {
+      clock();
+      await save();
+    }
+  };
+
+  if (!finished(job) && job.lease < Date.now()) {
+    job.lease = deadline + 4000;
+    await save();
+    const work = Promise.all([job.gov && !job.gov.out ? advanceGov() : null, job.base && !job.base.out ? advanceBase() : null])
+      .catch(() => {})
+      .then(() => { job.lease = 0; return save(); });
+    // Si la plataforma lo permite, se responde ya y el trabajo sigue; si no, se espera.
+    if (typeof context?.waitUntil === "function") context.waitUntil(work);
+    else await work;
+  }
 
   const labels = modules.map((m) => g.pipeline.modules?.[m]?.label || m);
   const out = [`PRUEBA ${param("id") || "-"} · ${model} · módulos: ${labels.join(", ") || "ninguno"}`, `PREGUNTA: ${q}`, ""];
-  if (gov) {
-    out.push(`=== CON FROM E · ruta ${gov.route || "-"} · ${gov.usage ? line(gov.usage) : "-"} · ${(gov.ms / 1000).toFixed(1)} s`);
-    if (gov.stages?.length) out.push("TRAZA: " + gov.stages.map((x) => x.label + (x.note ? ` [${x.note}]` : "")).join(" > "));
-    if (gov.error) out.push("ERROR: " + gov.error);
-    else if (gov.blocked) out.push("RETENIDA POR EL FILTRO DE SALIDA");
-    else out.push("SEÑAL: " + gov.signal + (gov.truncated ? " · CORTADA" : ""), "--- respuesta", gov.text);
+  const G = job.gov;
+  const B = job.base;
+  if (G) {
+    const u = G.out?.usage || G.st?.usage || null;
+    const usage = u ? { input: u.input + (G.gateUsage?.input || 0), output: u.output + (G.gateUsage?.output || 0), calls: (u.calls || 0) + (G.gate ? 1 : 0) } : null;
+    out.push(`=== CON FROM E · ruta ${G.route || "-"} · ${usage ? line(usage) : "-"} · ${(G.ms / 1000).toFixed(1)} s`);
+    if (G.stages.length) out.push("TRAZA: " + G.stages.map((x) => x.label + (x.note ? ` [${x.note}]` : "")).join(" > "));
+    if (!G.out) out.push("EN CURSO");
+    else if (G.out.error) out.push("ERROR: " + G.out.error);
+    else if (G.out.blocked) out.push("RETENIDA POR EL FILTRO DE SALIDA");
+    else out.push("SEÑAL: " + G.out.signal + (G.out.truncated ? " · CORTADA" : ""), "--- respuesta", G.out.text);
     out.push("");
   }
-  if (base) {
-    out.push(`=== SIN ARQUITECTURA · ${base.usage ? line(base.usage) : "-"} · ${(base.ms / 1000).toFixed(1)} s`);
-    if (base.error) out.push("ERROR: " + base.error);
-    else out.push((base.truncated ? "CORTADA\n" : "") + "--- respuesta", base.text);
+  if (B) {
+    out.push(`=== SIN ARQUITECTURA · ${B.out?.usage ? line(B.out.usage) : "-"} · ${(B.ms / 1000).toFixed(1)} s`);
+    if (!B.out) out.push("EN CURSO");
+    else if (B.out.error) out.push("ERROR: " + B.out.error);
+    else out.push((B.out.truncated ? "CORTADA\n" : "") + "--- respuesta", B.out.text);
     out.push("");
   }
-  out.push("=== FIN");
+  out.push(finished(job) ? "=== FIN" : "=== EN CURSO · vuelve a pedirlo con otro número al final de la ruta");
   return new Response(out.join("\n"), { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 };
 

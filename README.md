@@ -64,8 +64,22 @@ por defecto `low`). Si un modelo rechaza el parámetro, la llamada se repite sin
 `/api/selftest` lanza un caso (mensaje y módulos) en servidor y devuelve en texto plano la
 respuesta gobernada y la directa. Solo existe en vistas previas y ramas, nunca en producción, y
 solo si están definidas `SELFTEST_KEY` (clave de API de quien prueba, marcada como secreta) y
-`SELFTEST_TOKEN` (contraseña de la entrada, que debe venir en `?t=`). Sin eso responde 404. Tiene
-tope diario (`SELFTEST_DAILY_CAP`, 80 por defecto). Para retirarla basta con borrar las variables.
+`SELFTEST_TOKEN` (contraseña de la entrada). Sin eso responde 404. Tiene tope diario de casos
+(`SELFTEST_DAILY_CAP`, 80 por defecto). Para retirarla basta con borrar las variables.
+
+Los parámetros van en la consulta (`?t=&id=&m=&q=`) o en la ruta, para lectores que no
+conservan la consulta:
+
+```
+/api/selftest/status/<contraseña>
+/api/selftest/<contraseña>/<id>/<módulos>/<pregunta en base64url>/<modelo o ->/<gov|base|->/<n>
+```
+
+En la ruta, los módulos van separados por punto (`todos` usa los de por defecto, `ninguno`
+no activa ninguno). Un caso es un trabajo reanudable: cada petición avanza las etapas que
+caben en una ejecución, guarda el estado sellado y devuelve lo que hay; mientras no termina,
+la respuesta acaba en `=== EN CURSO` y se vuelve a pedir cambiando `<n>`. El mismo caso
+(mismo id, módulos, modelo y pregunta) no se ejecuta dos veces.
 
 ## Desarrollo local
 
