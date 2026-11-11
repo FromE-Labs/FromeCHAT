@@ -77,7 +77,9 @@ conservan la consulta:
 
 La pregunta puede ir también como `caso.<nombre>`, que se busca en un archivo de casos del
 repositorio privado (opcional). La respuesta gobernada lleva una línea `FILTRO` con lo que
-el filtro de salida ve en ella. En la ruta, los módulos van separados por punto (`todos` usa los de por defecto, `ninguno`
+el filtro de salida ve en ella. Con `ciclo` en lugar de `gov` se entra al ciclo sin la comprobación de entrada, para probar
+las capas interiores; la línea `INTERNO` dice qué ve el filtro en el material de cada etapa.
+En la ruta, los módulos van separados por punto (`todos` usa los de por defecto, `ninguno`
 no activa ninguno). Un caso es un trabajo reanudable: cada petición avanza las etapas que
 caben en una ejecución, guarda el estado sellado y devuelve lo que hay; mientras no termina,
 la respuesta acaba en `=== EN CURSO` y se vuelve a pedir cambiando `<n>`. El mismo caso

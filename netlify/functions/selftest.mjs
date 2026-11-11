@@ -127,9 +127,12 @@ export default async (req, context) => {
   const model = MODELS[param("model")] ? param("model") : "claude-opus-5-5";
   const mParam = param("m") ?? null;
   const modules = pickModules(g.pipeline, mParam === null ? undefined : mParam.split(",").map((x) => x.trim()).filter(Boolean));
-  const side = ["gov", "base"].includes(param("side")) ? param("side") : "both";
+  // «ciclo»: solo el lado gobernado y sin comprobación de entrada, para probar las capas
+  // interiores con mensajes que la entrada desviaría a la ruta pública.
+  const forced = param("side") === "ciclo";
+  const side = forced ? "gov" : ["gov", "base"].includes(param("side")) ? param("side") : "both";
   const messages = [{ role: "user", content: q }];
-  const jobId = createHash("sha256").update([param("id") || "", model, modules.join(","), side, q].join("\n")).digest("hex").slice(0, 32);
+  const jobId = createHash("sha256").update([param("id") || "", model, modules.join(","), side + (forced ? "!" : ""), q].join("\n")).digest("hex").slice(0, 32);
 
   let job = await loadJob(g, jobId);
   if (!job) {
@@ -163,6 +166,11 @@ export default async (req, context) => {
     let mark = Date.now();
     const clock = () => { G.ms += Date.now() - mark; mark = Date.now(); };
     try {
+      if (!G.gate && forced) {
+        G.gate = true;
+        G.forced = true;
+        G.route = "governed";
+      }
       if (!G.gate) {
         const verdict = await gate({ key, messages });
         G.gate = true;
@@ -210,9 +218,17 @@ export default async (req, context) => {
   const B = job.base;
   if (G) {
     const u = G.out?.usage || G.st?.usage || null;
-    const usage = u ? { input: u.input + (G.gateUsage?.input || 0), output: u.output + (G.gateUsage?.output || 0), calls: (u.calls || 0) + (G.gate ? 1 : 0) } : null;
-    out.push(`=== CON FROM E · ruta ${G.route || "-"} · ${usage ? line(usage) : "-"} · ${(G.ms / 1000).toFixed(1)} s`);
+    const usage = u ? { input: u.input + (G.gateUsage?.input || 0), output: u.output + (G.gateUsage?.output || 0), calls: (u.calls || 0) + (G.gate && !G.forced ? 1 : 0) } : null;
+    out.push(`=== CON FROM E · ruta ${G.route || "-"}${G.forced ? " (forzada, sin comprobación de entrada)" : ""} · ${usage ? line(usage) : "-"} · ${(G.ms / 1000).toFixed(1)} s`);
     if (G.stages.length) out.push("TRAZA: " + G.stages.map((x) => x.label + (x.note ? ` [${x.note}]` : "")).join(" > "));
+    // Lo que el filtro ve en el material interno de cada etapa (nunca sale del servidor).
+    const vars = Object.entries(G.st?.vars || {});
+    if (vars.length) {
+      out.push("INTERNO: " + vars.map(([name, v]) => {
+        const f = inspect(g, typeof v === "string" ? v : JSON.stringify(v));
+        return `${name} ${f.blocked ? "con material propio (" + f.blocked + ")" : "limpio"} ${f.hits}/${f.threshold}`;
+      }).join(" · "));
+    }
     if (!G.out) out.push("EN CURSO");
     else if (G.out.error) out.push("ERROR: " + G.out.error);
     else if (G.out.blocked) out.push("RETENIDA POR EL FILTRO DE SALIDA");

@@ -91,6 +91,17 @@ test("la pregunta puede venir por nombre de caso guardado; informa del filtro", 
   } finally { s.restore(); }
 });
 
+test("lado «ciclo»: entra al ciclo sin comprobación de entrada e informa del material interno", async () => {
+  process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
+  const s = stub();
+  try {
+    const text = await (await call(`${PREVIEW}/${TOKEN}/41/m1.m2/caso.uno/x/ciclo`)).text();
+    assert.ok(text.includes("ruta governed (forzada, sin comprobación de entrada)") && text.includes("3 llamadas"));
+    assert.ok(/INTERNO: .*limpio 0\/\d+/.test(text) && text.includes("Respuesta gobernada.") && !text.includes("SIN ARQUITECTURA"));
+    assert.equal(s.keys.length, 3, "no se llama al clasificador de entrada");
+  } finally { s.restore(); }
+});
+
 test("lanza el caso con los módulos pedidos y devuelve las dos respuestas sin la clave", async () => {
   process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
   const s = stub();
