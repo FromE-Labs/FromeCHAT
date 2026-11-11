@@ -62,10 +62,12 @@ export default async (req, context) => {
   // Diagnóstico sin secretos: solo dice qué condiciones se cumplen.
   if (url.searchParams.get("status") === "1") {
     const given = url.searchParams.get("t") || "";
-    return new Response(
-      `selftest · método: ${req.method} · contexto: ${context?.deploy?.context || "desconocido"} · host: ${url.host} · producción: ${prod ? "sí" : "no"} · clave definida: ${key ? "sí" : "no"} · contraseña definida: ${token ? "sí (" + token.length + " caracteres)" : "no"} · contraseña recibida: ${given ? (token && sameToken(given, token) ? "coincide" : "no coincide (" + given.length + " caracteres)") : "ninguna"}`,
-      { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } }
-    );
+    const info = `selftest · método: ${req.method} · contexto: ${context?.deploy?.context || "desconocido"} · host: ${url.host} · producción: ${prod ? "sí" : "no"} · clave definida: ${key ? "sí" : "no"} · contraseña definida: ${token ? "sí (" + token.length + " caracteres)" : "no"} · contraseña recibida: ${given ? (token && sameToken(given, token) ? "coincide" : "no coincide (" + given.length + " caracteres)") : "ninguna"}`;
+    const json = url.searchParams.get("fmt") === "json";
+    return new Response(json ? JSON.stringify({ status: info }) : info, {
+      status: 200,
+      headers: { "content-type": json ? "application/json; charset=utf-8" : "text/plain; charset=utf-8", "cache-control": "no-store" },
+    });
   }
   const allowed = Boolean(key && token && !prod && sameToken(url.searchParams.get("t") || "", token));
   // Algunos lectores preguntan antes con HEAD: se contesta sin ejecutar nada.
@@ -130,4 +132,4 @@ export default async (req, context) => {
 };
 
 // Sin regla de frecuencia propia: la protegen la contraseña y el tope diario.
-export const config = { path: "/api/selftest" };
+export const config = { path: ["/api/selftest", "/api/probe"] };
