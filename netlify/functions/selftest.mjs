@@ -226,7 +226,7 @@ export default async (req, context) => {
     if (vars.length) {
       out.push("INTERNO: " + vars.map(([name, v]) => {
         const f = inspect(g, typeof v === "string" ? v : JSON.stringify(v));
-        return `${name} ${f.blocked ? "con material propio (" + f.blocked + ")" : "limpio"} ${f.hits}/${f.threshold}`;
+        return `${name} ${f.blocked ? "con material propio (" + f.blocked + ")" : "limpio"} ${f.hits}/${f.threshold}${f.which.length ? " [grupo " + f.which.join(",") + "]" : ""}`;
       }).join(" · "));
     }
     if (!G.out) out.push("EN CURSO");
@@ -234,7 +234,7 @@ export default async (req, context) => {
     else if (G.out.blocked) out.push("RETENIDA POR EL FILTRO DE SALIDA");
     else {
       const f = inspect(g, G.out.text);
-      out.push("SEÑAL: " + G.out.signal + (G.out.truncated ? " · CORTADA" : ""), `FILTRO: ${f.blocked ? "bloquearía (" + f.blocked + ")" : "limpio"} · huellas ${f.hits}/${f.threshold} · ${G.out.text.length} caracteres`, "--- respuesta", G.out.text);
+      out.push("SEÑAL: " + G.out.signal + (G.out.truncated ? " · CORTADA" : ""), `FILTRO: ${f.blocked ? "bloquearía (" + f.blocked + ")" : "limpio"} · huellas ${f.hits}/${f.threshold}${f.which.length ? " [grupo " + f.which.join(",") + "]" : ""} · ${G.out.text.length} caracteres`, "--- respuesta", G.out.text);
     }
     out.push("");
   }

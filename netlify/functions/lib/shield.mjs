@@ -174,7 +174,8 @@ export function inspect(g, text) {
   f.push(text);
   f.end();
   const soft = ` ${softNorm(text)} `;
-  let hits = 0;
-  for (const grp of f.groups) if (grp.some((p) => soft.includes(p))) hits++;
-  return { blocked: f.blocked, hits, threshold: f.threshold };
+  // which: posiciones de los grupos que aparecen (el número, nunca la frase).
+  const which = [];
+  f.groups.forEach((grp, i) => { if (grp.some((p) => soft.includes(p))) which.push(i); });
+  return { blocked: f.blocked, hits: which.length, which, threshold: f.threshold };
 }
