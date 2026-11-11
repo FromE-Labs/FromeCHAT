@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-const { getPath, truthy, render, parseJson, repairJson, decide, conversationText, tagGuard, newState } = await import("../netlify/functions/lib/engine.mjs");
+const { getPath, truthy, render, parseJson, repairJson, decide, conversationText, tagGuard, newState, runStage } = await import("../netlify/functions/lib/engine.mjs");
 const { seal, unseal, bindingOf } = await import("../netlify/functions/lib/seal.mjs");
 
 test("rutas: solo propiedades propias, con length en listas", () => {
@@ -108,4 +108,23 @@ test("etapa inicial según los módulos activos", () => {
   assert.equal(newState(pipeline, { bind: "k", ttl: 1000, modules: ["x"] }).next, "a");
   assert.equal(newState(pipeline, { bind: "k", ttl: 1000, modules: ["y"] }).next, "b");
   assert.equal(newState({ ...pipeline, start: "a" }, { bind: "k", ttl: 1000, modules: [] }).next, "a");
+});
+
+test("etapa de texto sin salida: usa su texto fijo si lo define, y si no devuelve error", async () => {
+  const real = globalThis.fetch;
+  const sse = 'data: {"type":"message_start","message":{"usage":{"input_tokens":5}}}\n\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":0}}\n\n';
+  globalThis.fetch = async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+  try {
+    const mk = (extra) => ({ start: "a", stages: { a: { type: "text", system: "S", conversation: true, input: "", save: "draft", next: [{ deliver: "draft" }], ...extra } } });
+    const messages = [{ role: "user", content: "hola" }];
+    let pipeline = mk({ fallback_text: "Texto fijo." });
+    let st = newState(pipeline, { bind: "k", ttl: 1000 });
+    let out = await runStage({ pipeline, st, key: "k", model: "m", messages, deadline: Date.now() + 5000 });
+    assert.equal(st.vars.draft, "Texto fijo.");
+    assert.equal(out.rule.deliver, "draft");
+    pipeline = mk({});
+    st = newState(pipeline, { bind: "k", ttl: 1000 });
+    out = await runStage({ pipeline, st, key: "k", model: "m", messages, deadline: Date.now() + 5000 });
+    assert.equal(out.error.retryable, true);
+  } finally { globalThis.fetch = real; }
 });

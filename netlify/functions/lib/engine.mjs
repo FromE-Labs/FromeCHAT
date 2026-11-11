@@ -252,6 +252,8 @@ export async function runStage({ pipeline, st, key, model, messages, deadline, g
     }
   } else {
     value = res.text.trim();
+    // Sin texto: si la etapa define un texto fijo se usa ese; si no, error reintentable.
+    if (!value && stage.fallback_text) value = String(stage.fallback_text);
     if (!value) return { stage, error: { message: "El modelo no ha devuelto texto.", retryable: true } };
     st.truncated = Boolean(res.truncated);
   }
