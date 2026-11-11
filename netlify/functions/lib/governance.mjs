@@ -49,8 +49,10 @@ export function loadGovernance() {
     for (const st of Object.values(pipeline.stages)) {
       st.system = st.system === "@runtime" ? prompt : mark(st.system);
       if (st.system !== prompt) protectedTexts.push(st.system);
-      // La parte fija de cada plantilla también es material propio.
+      // La parte fija de cada plantilla y las partes de cada módulo también son material propio.
       protectedTexts.push(String(st.input || "").replace(/\{\{[^}]+\}\}/g, " "));
+      st.parts = (st.parts || []).map((part) => ({ ...part, text: mark(part.text) }));
+      for (const part of st.parts) protectedTexts.push(part.text);
     }
   }
 

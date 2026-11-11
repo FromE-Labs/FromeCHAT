@@ -137,7 +137,42 @@ export function conversationText(messages, budget = 60000) {
   return out.join("\n\n");
 }
 
-export function newState(pipeline, { bind, ttl }) {
+// Módulos: unidades que el usuario enciende o apaga. Su definición (nombre, textos y
+// a qué etapas afectan) está en el archivo privado; aquí solo se filtra por id.
+export function pickModules(pipeline, requested) {
+  const defs = pipeline.modules || {};
+  const ids = Object.keys(defs);
+  if (!Array.isArray(requested)) return ids.filter((id) => defs[id].default !== false);
+  const want = new Set(requested.filter((x) => typeof x === "string"));
+  return ids.filter((id) => want.has(id));
+}
+
+// Banderas derivadas de los módulos activos: { all?: [...], any?: [...], none?: [...] }.
+export function computeFlags(pipeline, active) {
+  const on = new Set(active);
+  const out = {};
+  for (const [name, f] of Object.entries(pipeline.flags || {})) {
+    out[name] =
+      (f.all || []).every((id) => on.has(id)) &&
+      (!f.any || f.any.some((id) => on.has(id))) &&
+      (f.none || []).every((id) => !on.has(id));
+  }
+  return out;
+}
+
+// Texto de sistema de una etapa: su base más las partes cuyas condiciones se cumplen.
+// Una parte es { text, when?: ruta, unless?: ruta }. Si la base contiene {{PARTS}},
+// las partes van en ese punto; si no, al final.
+export function stageSystem(stage, ctx) {
+  const parts = (stage.parts || [])
+    .filter((p) => (p.when === undefined || truthy(getPath(ctx, p.when))) && (p.unless === undefined || !truthy(getPath(ctx, p.unless))))
+    .map((p) => p.text)
+    .join("\n\n");
+  if (stage.system.includes("{{PARTS}}")) return stage.system.replace("{{PARTS}}", () => parts);
+  return parts ? stage.system + "\n\n" + parts : stage.system;
+}
+
+export function newState(pipeline, { bind, ttl, modules = [] }) {
   const visits = {};
   for (const id of Object.keys(pipeline.stages)) visits[id] = 0;
   return {
@@ -148,6 +183,8 @@ export function newState(pipeline, { bind, ttl }) {
     step: 0,
     vars: {},
     visits,
+    modules: Object.fromEntries(modules.map((id) => [id, true])),
+    flags: computeFlags(pipeline, modules),
     usage: { input: 0, output: 0, calls: 0 },
     path: [],
     truncated: false,
@@ -155,7 +192,7 @@ export function newState(pipeline, { bind, ttl }) {
 }
 
 export function contextOf(st, messages) {
-  return { ...st.vars, visits: st.visits, conversation: conversationText(messages) };
+  return { ...st.vars, visits: st.visits, modules: st.modules || {}, flags: st.flags || {}, conversation: conversationText(messages) };
 }
 
 // Ejecuta la etapa st.next y actualiza st. Devuelve { stage, rule } o { stage, error }.
@@ -166,9 +203,10 @@ export async function runStage({ pipeline, st, key, model, messages, deadline, g
 
   const ctx = contextOf(st, messages);
   const input = render(stage.input, ctx, { guard });
+  const base = stageSystem(stage, ctx);
   const system = stage.conversation
-    ? [{ type: "text", text: stage.system }, { type: "text", text: input }]
-    : [{ type: "text", text: stage.system }];
+    ? [{ type: "text", text: base }, { type: "text", text: input }]
+    : [{ type: "text", text: base }];
   const msgs = stage.conversation ? messages : [{ role: "user", content: input }];
   const call = () =>
     callModel({

@@ -19,7 +19,7 @@ import { LeakFilter } from "./lib/shield.mjs";
 import { gate } from "./lib/gate.mjs";
 import { recordTurn } from "./lib/consent.mjs";
 import { openStream, readStream, upstreamError } from "./lib/anthropic.mjs";
-import { runStage, newState, contextOf, getPath, render } from "./lib/engine.mjs";
+import { runStage, newState, contextOf, getPath, render, pickModules } from "./lib/engine.mjs";
 import { seal, unseal, bindingOf, STATE_TTL_MS } from "./lib/seal.mjs";
 
 // Modelos de frontera ofrecidos. Se valida contra esta lista para que el servidor
@@ -164,6 +164,9 @@ function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline }
   return sse("governed", async (send) => {
     const id = st.next;
     const stage = pipeline.stages[id];
+    if (st.step === 0 && pipeline.modules) {
+      send({ type: "frome_modules", labels: Object.keys(st.modules || {}).map((m) => pipeline.modules[m]?.label).filter(Boolean) });
+    }
     send({ type: "frome_stage", id, label: stage.label, detail: stage.detail || "", status: "running" });
     const out = await runStage({ pipeline, st, key, model, messages, deadline, guard });
     if (out.error) {
@@ -191,7 +194,11 @@ function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline }
     let text = notice ? render(rule.deliver_text, ctx, { clip: 160 }) : String(getPath(ctx, rule.deliver) ?? "");
     text = text.replace(/\n*⟶ Signal:[^\n]*\s*$/, "").trim();
     const signal = render(rule.signal, ctx, { clip: 60 });
-    if (!text || !clean(g, text) || !clean(g, signal)) {
+    if (!text) {
+      send({ type: "error", error: { message: "El ciclo no ha producido respuesta. Vuelve a enviar el mensaje.", retryable: false } });
+      return;
+    }
+    if (!clean(g, text) || !clean(g, signal)) {
       send({ type: "frome_blocked" });
       return;
     }
@@ -208,7 +215,7 @@ function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline }
         messages,
         assistantText: text,
         usage: st.usage,
-        cycle: { path: st.path, signal, withheld: notice },
+        cycle: { path: st.path, signal, withheld: notice, modules: Object.keys(st.modules || {}) },
       }).catch(() => {});
     }
   });
@@ -239,7 +246,9 @@ export default async (req) => {
   if (body.governed === false) return single({ route: "baseline", ...common });
 
   const g = loadGovernance();
-  const bind = bindingOf(model, messages);
+  // Módulos activos para esta respuesta. Quedan fijados en el estado sellado.
+  const modules = g.pipeline ? pickModules(g.pipeline, body.modules) : [];
+  const bind = bindingOf(model, messages, modules);
 
   // Continuación de un ciclo en curso: el estado sellado dice qué etapa toca.
   if (body.state !== undefined && body.state !== null) {
@@ -258,7 +267,7 @@ export default async (req) => {
   if (verdict.probe) return single({ route: "public", ...common, extraUsage: verdict.usage || { input: 0, output: 0 } });
   if (!g.pipeline) return json(500, { error: "governance", message: "La arquitectura no está disponible en este despliegue." });
 
-  const st = newState(g.pipeline, { bind, ttl: STATE_TTL_MS });
+  const st = newState(g.pipeline, { bind, ttl: STATE_TTL_MS, modules });
   if (verdict.usage) {
     st.usage.input += verdict.usage.input;
     st.usage.output += verdict.usage.output;

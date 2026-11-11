@@ -11,7 +11,7 @@
     pillGov: $("pill-gov"), banner: $("banner"), cmpOff: $("btn-compare-off"),
     panes: $("panes"), paneB: $("pane-b"), threadA: $("thread-a"), threadB: $("thread-b"),
     headA: $("head-a"), metaA: $("meta-a"), metaB: $("meta-b"), empty: $("empty"),
-    form: $("composer"), input: $("input"), send: $("btn-send"), hintR: $("hint-right"), newBtn: $("btn-new"), sid: $("sid"),
+    form: $("composer"), input: $("input"), send: $("btn-send"), hintR: $("hint-right"), newBtn: $("btn-new"), sid: $("sid"), modsBox: $("mods-box"), mods: $("modules"), presets: $("presets"),
   };
 
   /* ---------- estado ---------- */
@@ -70,13 +70,43 @@
     el.send.disabled = !keyOk() || state.busy;
   }
 
-  /* ---------- modelos ---------- */
+  /* ---------- modelos y módulos ---------- */
+  const mods = { defs: [], on: new Set() };
+  function activeModules() { return mods.defs.filter((m) => mods.on.has(m.id)).map((m) => m.id); }
+  function saveModules() { try { localStorage.setItem("fromechat.modules", JSON.stringify(activeModules())); } catch {} }
+  function paintModules() {
+    for (const lab of el.mods.querySelectorAll("label.toggle")) {
+      const inp = lab.querySelector("input"); inp.checked = mods.on.has(inp.dataset.mod); lab.classList.toggle("on", inp.checked);
+    }
+  }
+  function buildModules(d) {
+    mods.defs = d.modules || [];
+    if (!mods.defs.length) return;
+    mods.on = new Set(mods.defs.filter((m) => m.default).map((m) => m.id));
+    try { const saved = JSON.parse(localStorage.getItem("fromechat.modules") || "null"); if (Array.isArray(saved)) mods.on = new Set(saved.filter((id) => mods.defs.some((m) => m.id === id))); } catch {}
+    el.mods.innerHTML = "";
+    for (const m of mods.defs) {
+      const lab = document.createElement("label"); lab.className = "toggle"; lab.style.marginTop = "8px";
+      const inp = document.createElement("input"); inp.type = "checkbox"; inp.dataset.mod = m.id;
+      const sp = document.createElement("span"); const b = document.createElement("b"); b.textContent = m.label; const sm = document.createElement("small"); sm.textContent = m.desc;
+      sp.appendChild(b); sp.appendChild(sm); lab.appendChild(inp); lab.appendChild(sp); el.mods.appendChild(lab);
+      inp.addEventListener("change", () => { if (inp.checked) mods.on.add(m.id); else mods.on.delete(m.id); saveModules(); paintModules(); syncToggles(); });
+    }
+    el.presets.innerHTML = "";
+    for (const pr of d.presets || []) {
+      const bt = document.createElement("button"); bt.type = "button"; bt.textContent = pr.label;
+      bt.addEventListener("click", () => { mods.on = new Set(pr.modules); saveModules(); paintModules(); syncToggles(); });
+      el.presets.appendChild(bt);
+    }
+    el.modsBox.hidden = false; paintModules();
+  }
   async function loadModels() {
     try {
       const r = await fetch("/api/models"); const d = await r.json();
       el.model.innerHTML = "";
       for (const m of d.models) { const o = document.createElement("option"); o.value = m.id; o.textContent = m.label; el.model.appendChild(o); }
       try { const saved = localStorage.getItem("fromechat.model"); if (saved && d.models.some((m) => m.id === saved)) el.model.value = saved; } catch {}
+      buildModules(d);
     } catch {
       el.model.innerHTML = '<option value="claude-opus-5-5">Claude Opus 5.5</option>';
     }
@@ -98,6 +128,9 @@
     el.pillGov.innerHTML = gov ? '<span class="dot"></span> From E™ activa · ciclo por etapas' : '<span class="dot"></span> Sin arquitectura';
     el.headA.textContent = gov ? "Con From E™" : "Sin arquitectura";
     el.hintR.textContent = gov ? (cmp ? "Coste por mensaje: el ciclo de From E™ más una llamada directa" : "Coste por mensaje: el ciclo de From E™, varias llamadas") : "";
+    el.modsBox.classList.toggle("off", !gov);
+    for (const inp of el.mods.querySelectorAll("input")) inp.disabled = !gov;
+    for (const bt of el.presets.querySelectorAll("button")) bt.disabled = !gov;
     el.hintR.className = gov ? "cost" : "";
     el.sid.hidden = !el.consent.checked;
     el.sid.textContent = "Identificador de esta sesión: " + state.sessionId;
@@ -188,12 +221,12 @@
 
   // Una petición a /api/chat. En modo gobernado ejecuta una etapa del ciclo.
   // Devuelve { cont } si hay más etapas, { done } si hay entrega, o { error, retry }.
-  async function step({ governed, messages, token, acc, ui }) {
+  async function step({ governed, messages, token, acc, ui, modules }) {
     let res;
     try {
       res = await fetch("/api/chat", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ key: el.key.value.trim(), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId, state: token || undefined }),
+        body: JSON.stringify({ key: el.key.value.trim(), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId, state: token || undefined, modules: governed && mods.defs.length ? modules : undefined }),
       });
     } catch { return { error: "No hay conexión con el servidor.", retry: true }; }
     if (!res.ok) {
@@ -215,6 +248,12 @@
           let ev; try { ev = JSON.parse(line.slice(6)); } catch { continue; }
           if (ev.type === "frome_route") {
             if (!acc.route) { acc.route = ev.route; if (governed) traceDone(ui, "gate", ev.route === "public" ? "ruta pública" : ""); }
+          } else if (ev.type === "frome_modules") {
+            if (ui.trace && !ui.trace.querySelector("li.mods")) {
+              const li = document.createElement("li"); li.className = "ok mods"; li.dataset.id = "mods";
+              const b = document.createElement("b"); b.textContent = "Módulos"; const sp = document.createElement("span"); sp.textContent = ev.labels.length ? ev.labels.join(" · ") : "ninguno (ciclo base)";
+              li.appendChild(b); li.appendChild(sp); ui.trace.insertBefore(li, ui.trace.firstChild);
+            }
           } else if (ev.type === "frome_stage") {
             if (ev.status === "running") traceRow(ui, ev.id, ev.label, ev.detail); else traceDone(ui, ev.id, ev.note);
           } else if (ev.type === "frome_continue") cont = ev.state;
@@ -242,8 +281,9 @@
     const t0 = performance.now();
     if (governed) { ui.body.hidden = true; traceRow(ui, "gate", "Comprobación de entrada", ""); }
     let token = null, tries = 0;
+    const modules = activeModules(); // fijados para toda la respuesta
     for (;;) {
-      const r = await step({ governed, messages, token, acc, ui });
+      const r = await step({ governed, messages, token, acc, ui, modules });
       if (r.cont) { token = r.cont; tries = 0; continue; }
       if (r.done) break;
       // Solo se reintenta una etapa del ciclo: su estado anterior sigue siendo válido.

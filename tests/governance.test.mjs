@@ -37,3 +37,11 @@ test("la ruta pública no contiene nada del prompt operativo ni del ciclo", () =
   for (const c of g.canaries) assert.ok(!pub.includes(c));
   for (const w of ["lantern", "seashells", "walnuts", "fig tree"]) assert.ok(!pub.includes(w));
 });
+
+test("el filtro de salida cubre también las partes de cada módulo, estén activas o no", () => {
+  const { shingles, pipeline, canaries } = loadGovernance();
+  const has = (s) => shingles.has(hardNorm(s).slice(0, 40));
+  assert.ok(has("Polish the copper kettle until the lighthouse keeper can read"));
+  assert.ok(has("Tie the green rope to the third mooring ring and never to the fourth"));
+  assert.ok(pipeline.stages.alpha.parts[0].text.includes(canaries[3]));
+});

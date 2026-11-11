@@ -82,3 +82,18 @@ test("sello: ida y vuelta, y rechazo ante cualquier alteración o clave distinta
   assert.equal(unseal(k, 42), null);
   assert.notEqual(bindingOf("m", [{ role: "user", content: "a" }]), bindingOf("m", [{ role: "user", content: "b" }]));
 });
+
+test("módulos y banderas: selección, valores de serie y condiciones all, any y none", async () => {
+  const { pickModules, computeFlags, stageSystem } = await import("../netlify/functions/lib/engine.mjs");
+  const p = { modules: { a: {}, b: { default: false }, c: {} }, flags: { soloA: { all: ["a"], none: ["b", "c"] }, algo: { any: ["b", "c"] } } };
+  assert.deepEqual(pickModules(p, undefined), ["a", "c"]);
+  assert.deepEqual(pickModules(p, ["c", "b", "x"]), ["b", "c"]);
+  assert.deepEqual(pickModules(p, []), []);
+  assert.deepEqual(pickModules({}, ["a"]), []);
+  assert.deepEqual(computeFlags(p, ["a"]), { soloA: true, algo: false });
+  assert.deepEqual(computeFlags(p, ["a", "c"]), { soloA: false, algo: true });
+  const stage = { system: "BASE {{PARTS}} FIN", parts: [{ when: "modules.a", text: "A $& {{PARTS}}" }, { unless: "flags.algo", text: "N" }, { text: "S" }] };
+  assert.equal(stageSystem(stage, { modules: { a: true }, flags: { algo: false } }), "BASE A $& {{PARTS}}\n\nN\n\nS FIN");
+  assert.equal(stageSystem({ system: "BASE", parts: [{ when: "modules.z", text: "Z" }] }, { modules: {} }), "BASE");
+  assert.equal(stageSystem({ system: "BASE", parts: [{ text: "S" }] }, {}), "BASE\n\nS");
+});

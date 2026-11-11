@@ -54,15 +54,22 @@
       </label>
       <label class="toggle on" id="t-governed" style="margin-top:8px">
         <input type="checkbox" id="governed" checked>
-        <span><b>From E™ activa</b><small>Cada mensaje recorre en servidor el ciclo de la arquitectura antes de entregarse. Con el comparador apagado, puedes desactivarla.</small></span>
+        <span><b>From E™ activa</b><small>Cada mensaje recorre en servidor el ciclo de la arquitectura, con los módulos que tengas marcados. Con el comparador apagado, puedes desactivarla.</small></span>
       </label>
+    </div>
+
+    <div id="mods-box" hidden>
+      <h4>Módulos <span class="beta">beta</span></h4>
+      <p class="state" style="margin:0 0 8px">Enciende o apaga cada módulo y compara el efecto con la respuesta directa.</p>
+      <div class="presets" id="presets"></div>
+      <div id="modules"></div>
     </div>
 
     <div>
       <h4>Tu aportación</h4>
       <label class="toggle" id="t-consent">
         <input type="checkbox" id="consent">
-        <span><b>Aportar esta sesión a la medición</b><small>Este banco de pruebas existe para medir From E™ con casos reales. Si lo activas, se guardan la conversación, el modelo, la condición (con o sin From E™) y el resumen del ciclo, con un hash de evidencia. Nunca tu clave, ni correo, ni IP. No incluyas datos personales de terceros. Es tu decisión en cada sesión y no cambia el funcionamiento.</small></span>
+        <span><b>Aportar esta sesión a la medición</b><small>Este banco de pruebas existe para medir From E™ con casos reales. Si lo activas, se guardan la conversación, el modelo, la condición (con o sin From E™), los módulos activos y el resumen del ciclo, con un hash de evidencia. Nunca tu clave, ni correo, ni IP. No incluyas datos personales de terceros. Es tu decisión en cada sesión y no cambia el funcionamiento.</small></span>
       </label>
       <p class="state" id="sid" style="margin-top:8px" hidden></p>
     </div>

@@ -359,3 +359,70 @@ test("respuesta directa que agota el espacio de salida sin texto: error claro, n
     assert.ok(!events.some((e) => e.type === "frome_usage"));
   } finally { globalThis.fetch = real; }
 });
+
+test("módulos: por defecto van los de serie y cada etapa lleva solo las partes de los activos", async () => {
+  const s = stub();
+  try {
+    const c = await cycle({ key: KEY, messages: msg("hola") });
+    const alpha = s.calls[1].sys;
+    assert.ok(alpha.includes("PART-M1") && alpha.includes("PART-M2") && !alpha.includes("PART-NONE"));
+    assert.ok(!alpha.includes("{{PARTS}}") && alpha.endsWith("End of alpha."));
+    assert.ok(!s.calls[3].sys.includes("PART-M3"));
+    assert.deepEqual(c.events.find((e) => e.type === "frome_modules").labels, ["Módulo uno", "Módulo dos"]);
+  } finally { s.restore(); }
+});
+
+test("módulos: la selección del usuario cambia el texto de las etapas; ids desconocidos se ignoran", async () => {
+  const s = stub();
+  try {
+    await cycle({ key: KEY, messages: msg("hola"), modules: ["m3", "m2", "inventado", 7] });
+    const alpha = s.calls[1].sys;
+    assert.ok(!alpha.includes("PART-M1") && alpha.includes("PART-M2"));
+    assert.ok(s.calls[3].sys.includes("PART-M3"));
+  } finally { s.restore(); }
+  const s2 = stub();
+  try {
+    const c = await cycle({ key: KEY, messages: msg("hola"), modules: [] });
+    const alpha = s2.calls[1].sys;
+    assert.ok(!alpha.includes("PART-M1") && !alpha.includes("PART-M2") && alpha.includes("PART-NONE"));
+    assert.deepEqual(c.events.find((e) => e.type === "frome_modules").labels, []);
+  } finally { s2.restore(); }
+});
+
+test("módulos: con uno solo activo el ciclo puede acabar en la primera etapa", async () => {
+  const s = stub({ alpha: '{"q":"¿Cuál es la fecha límite?"}' });
+  try {
+    const c = await cycle({ key: KEY, messages: msg("hola"), modules: ["m1"] });
+    assert.deepEqual(s.kinds(), ["gate", "alpha"]);
+    assert.equal(c.text, "¿Cuál es la fecha límite?");
+    assert.equal(c.signal, "Alfa — solo");
+  } finally { s.restore(); }
+});
+
+test("módulos: quedan fijados en el estado sellado y no se pueden cambiar a mitad de ciclo", async () => {
+  const s = stub();
+  try {
+    const first = await post({ key: KEY, messages: msg("hola"), modules: ["m1", "m2"] });
+    const state = first.events.find((e) => e.type === "frome_continue").state;
+    assert.equal((await post({ key: KEY, messages: msg("hola"), modules: ["m2"], state })).r.status, 409);
+    assert.equal((await post({ key: KEY, messages: msg("hola"), modules: ["m2", "m1"], state })).r.status, 200);
+  } finally { s.restore(); }
+});
+
+test("módulos: un ciclo sin texto que entregar devuelve un error, no un aviso de retención", async () => {
+  const s = stub({ alpha: '{"otra":"cosa"}' });
+  try {
+    const c = await cycle({ key: KEY, messages: msg("hola"), modules: ["m1"] });
+    assert.ok(c.events.find((e) => e.type === "error").error.message.includes("no ha producido respuesta"));
+    assert.ok(!c.events.some((e) => e.type === "frome_blocked"));
+  } finally { s.restore(); }
+});
+
+test("la interfaz recibe el nombre de los módulos, nunca sus textos", async () => {
+  const models = (await import("../netlify/functions/models.mjs")).default;
+  const raw = await (await models()).text();
+  const d = JSON.parse(raw);
+  assert.deepEqual(d.modules.map((m) => [m.id, m.label, m.default]), [["m1", "Módulo uno", true], ["m2", "Módulo dos", true], ["m3", "Módulo tres", false]]);
+  assert.equal(d.presets[0].label, "Solo uno");
+  for (const w of ["PART-", "kettle", "gulls", "seashells", "lantern"]) assert.ok(!raw.includes(w));
+});

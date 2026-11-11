@@ -171,3 +171,12 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 /* Espera sin texto: el modelo piensa antes de escribir */
 .msg .body.streaming:empty::before{content:"El modelo está pensando antes de escribir…";color:var(--muted,#8a97a4);font-size:14px}
 .msg .body.streaming:empty::after{content:none}
+
+/* Módulos */
+.beta{display:inline-block;margin-left:6px;padding:1px 6px;border:1px solid var(--accent);color:var(--accent);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;vertical-align:1px}
+.presets{display:flex;gap:8px;margin:0 0 4px}
+.presets button{flex:1;background:transparent;border:1px solid var(--line-strong);color:var(--soft);font:inherit;font-size:12px;font-weight:650;padding:7px 8px;cursor:pointer}
+.presets button:hover{border-color:var(--accent);color:#fff}
+.presets button:disabled{opacity:.4;cursor:default}
+#mods-box.off .toggle{opacity:.45}
+.trace li.mods span{color:#8a97a4}

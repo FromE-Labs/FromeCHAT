@@ -10,7 +10,7 @@
       "type": "json",
       "model": "main",
       "max_tokens": 200,
-      "system": "ALPHA-STAGE {{C2}}. Sort the seashells by size before the tide returns and write the tally on the blue slate behind the boathouse door.",
+      "system": "ALPHA-STAGE {{C2}}. Sort the seashells by size before the tide returns and write the tally on the blue slate behind the boathouse door. {{PARTS}} End of alpha.",
       "input": "<talk>\n{{conversation}}\n</talk>",
       "save": "plan",
       "fallback": {},
@@ -21,7 +21,26 @@
           "signal": "Alfa — pregunta"
         },
         {
+          "if": "flags.solo",
+          "deliver": "plan.q",
+          "signal": "Alfa — solo"
+        },
+        {
           "goto": "beta"
+        }
+      ],
+      "parts": [
+        {
+          "when": "modules.m1",
+          "text": "PART-M1 {{C4}}. Polish the copper kettle until the lighthouse keeper can read the tide tables in its reflection."
+        },
+        {
+          "when": "modules.m2",
+          "text": "PART-M2. Count the gulls on the east pier twice and report only the smaller of the two numbers."
+        },
+        {
+          "unless": "flags.alguno",
+          "text": "PART-NONE. Leave the lantern unlit when neither of the later pieces is in use."
         }
       ]
     },
@@ -83,7 +102,64 @@
           "signal": "Gamma — validada · pasadas: {{visits.beta}}"
         }
       ],
-      "fallback_note": "sin lectura"
+      "fallback_note": "sin lectura",
+      "parts": [
+        {
+          "when": "modules.m3",
+          "text": "PART-M3. Tie the green rope to the third mooring ring and never to the fourth."
+        }
+      ]
     }
-  }
+  },
+  "modules": {
+    "m1": {
+      "label": "Módulo uno",
+      "desc": "Primera pieza de pruebas."
+    },
+    "m2": {
+      "label": "Módulo dos",
+      "desc": "Segunda pieza de pruebas.",
+      "default": true
+    },
+    "m3": {
+      "label": "Módulo tres",
+      "desc": "Apagado de serie.",
+      "default": false
+    }
+  },
+  "flags": {
+    "solo": {
+      "all": [
+        "m1"
+      ],
+      "none": [
+        "m2",
+        "m3"
+      ]
+    },
+    "alguno": {
+      "any": [
+        "m2",
+        "m3"
+      ]
+    }
+  },
+  "presets": [
+    {
+      "id": "solo",
+      "label": "Solo uno",
+      "modules": [
+        "m1"
+      ]
+    },
+    {
+      "id": "todo",
+      "label": "Todo",
+      "modules": [
+        "m1",
+        "m2",
+        "m3"
+      ]
+    }
+  ]
 }

@@ -10,8 +10,8 @@ import { deflateRawSync, inflateRawSync } from "node:zlib";
 export const STATE_TTL_MS = 15 * 60 * 1000;
 const MAX_TOKEN_CHARS = 400_000;
 
-export function bindingOf(model, messages) {
-  return createHash("sha256").update(model + "\n" + JSON.stringify(messages)).digest("base64url");
+export function bindingOf(model, messages, modules = []) {
+  return createHash("sha256").update(model + "\n" + modules.join(",") + "\n" + JSON.stringify(messages)).digest("base64url");
 }
 
 export function seal(key, obj) {
