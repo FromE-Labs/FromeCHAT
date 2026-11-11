@@ -160,6 +160,8 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 .body.md pre{margin:0 0 .85em;padding:12px 14px;background:#070a0e;border:1px solid var(--line);overflow:auto}
 .body.md pre code{background:none;border:0;padding:0;font-size:13px;white-space:pre}
 .body.md blockquote{margin:0 0 .85em;padding:2px 0 2px 14px;border-left:1px solid var(--accent);color:var(--soft)}
+.body.md blockquote p{margin:0 0 .55em}
+.body.md blockquote p:last-child{margin-bottom:0}
 .body.md hr{border:0;border-top:1px solid var(--line);margin:1.1em 0}
 .body.md a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 .body.md .tw{overflow:auto;margin:0 0 .85em}

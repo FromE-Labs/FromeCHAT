@@ -206,7 +206,13 @@
         if (!list) list = { tag, items: [] };
         list.items.push({ t: m[3], deep }); continue;
       }
-      if ((m = ln.match(/^\s{0,3}>\s?(.*)$/))) { flush(); out.push("<blockquote>" + inline(m[1] || "") + "</blockquote>"); continue; }
+      if (/^\s{0,3}>/.test(ln)) {
+        // Líneas de cita seguidas forman una sola cita; una línea «>» vacía separa párrafos.
+        flush(); const ps = [[]];
+        while (i < lines.length && (m = lines[i].match(/^\s{0,3}>\s?(.*)$/))) { if (m[1].trim()) ps[ps.length - 1].push(m[1]); else ps.push([]); i++; }
+        i--;
+        out.push("<blockquote>" + ps.filter((x) => x.length).map((x) => "<p>" + x.map(inline).join("<br>") + "</p>").join("") + "</blockquote>"); continue;
+      }
       if (!ln.trim()) { flush(); continue; }
       if (list && /^\s{2,}\S/.test(ln)) { list.items[list.items.length - 1].t += " " + ln.trim(); continue; }
       flushL(); para.push(ln);
