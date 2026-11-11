@@ -129,7 +129,5 @@ export default async (req, context) => {
   return new Response(out.join("\n"), { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 };
 
-export const config = {
-  path: "/api/selftest",
-  rateLimit: { windowLimit: 12, windowSize: 60, aggregateBy: ["ip", "domain"] },
-};
+// Sin regla de frecuencia propia: la protegen la contraseña y el tope diario.
+export const config = { path: "/api/selftest" };
