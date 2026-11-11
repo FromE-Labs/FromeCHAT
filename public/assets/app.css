@@ -182,3 +182,33 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 .presets button:disabled{opacity:.4;cursor:default}
 #mods-box.off .toggle{opacity:.45}
 .trace li.mods span{color:#8a97a4}
+
+/* ---------- revisión de sesiones (página privada) ---------- */
+.rv{padding:48px 0 96px}
+.rv-gate{max-width:760px}
+.rv-gate-form{display:flex;gap:10px;max-width:520px}
+.rv-bar{display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin:0 0 22px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.rv-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--soft);cursor:pointer}
+.rv-check input{width:auto}
+#export-box{margin:0 0 22px}
+#export-box textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.5}
+.rv-card{border:1px solid var(--line);background:var(--panel);padding:22px;margin:0 0 18px}
+.rv-meta{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--muted);letter-spacing:.04em;margin-bottom:14px}
+.rv-history{margin:0 0 14px;font-size:13.5px;color:var(--soft)}
+.rv-history summary{cursor:pointer;color:var(--muted)}
+.rv-line{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.rv-question{border-left:1px solid var(--accent);padding:2px 0 2px 16px;margin:0 0 18px}
+.rv-question small{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:800;margin-bottom:4px}
+.rv-question p{margin:0;font-size:16px;white-space:pre-wrap;overflow-wrap:anywhere}
+.rv-cols{display:grid;grid-template-columns:1fr;gap:22px}
+.rv-cols.two{grid-template-columns:1fr 1fr}
+.rv-col{min-width:0}
+.rv-col h4{margin:0 0 6px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#dfe6ec}
+.rv-answer{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;line-height:1.6;color:var(--soft);background:var(--panel-2);border:1px solid var(--line);padding:14px;max-height:460px;overflow:auto}
+.rv-form{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.rv-form textarea{resize:vertical;line-height:1.5}
+.rv-verdict{display:flex;gap:8px}
+.rv-verdict .btn{min-height:36px}
+.rv-verdict .btn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:#fff}
+.rv-save{display:flex;align-items:center;gap:14px}
+@media(max-width:900px){.rv-cols.two{grid-template-columns:1fr}.rv-gate-form{flex-direction:column}}

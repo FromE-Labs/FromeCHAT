@@ -85,6 +85,16 @@ caben en una ejecución, guarda el estado sellado y devuelve lo que hay; mientra
 la respuesta acaba en `=== EN CURSO` y se vuelve a pedir cambiando `<n>`. El mismo caso
 (mismo id, módulos, modelo y pregunta) no se ejecuta dos veces.
 
+## Revisión de sesiones aportadas
+
+`/revision/` es una página privada para la autora de la arquitectura. Muestra los turnos que los
+usuarios han decidido aportar, con la respuesta gobernada y la directa lado a lado, y guarda junto
+a cada uno su veredicto y su corrección. Solo existe si está definida `REVIEW_TOKEN` (20 caracteres
+o más); la contraseña viaja en una cabecera, nunca en la URL, y sin ella `/api/review` responde 404.
+La exportación contiene únicamente lo escrito por la autora, no las conversaciones. Las
+correcciones no se incorporan solas a nada: son la materia de la que se redactan los ejemplos de
+los módulos en el repositorio privado.
+
 ## Desarrollo local
 
 ```bash
