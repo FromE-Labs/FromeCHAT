@@ -50,6 +50,14 @@ export default async (req) => {
   const url = new URL(req.url);
   const key = (process.env.SELFTEST_KEY || "").trim();
   const token = (process.env.SELFTEST_TOKEN || "").trim();
+  // Diagnóstico sin secretos: solo dice qué condiciones se cumplen, y solo fuera de producción.
+  if (req.method === "GET" && url.searchParams.get("status") === "1" && previewHost(url.host)) {
+    const given = url.searchParams.get("t") || "";
+    return new Response(
+      `selftest · vista previa: sí · clave definida: ${key ? "sí" : "no"} · contraseña definida: ${token ? "sí (" + token.length + " caracteres)" : "no"} · contraseña recibida: ${given ? (sameToken(given, token) ? "coincide" : "no coincide (" + given.length + " caracteres)") : "ninguna"}`,
+      { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } }
+    );
+  }
   if (req.method !== "GET" || !key || !token || !previewHost(url.host) || !sameToken(url.searchParams.get("t") || "", token)) return gone();
 
   const q = (url.searchParams.get("q") || "").slice(0, 8000).trim();
