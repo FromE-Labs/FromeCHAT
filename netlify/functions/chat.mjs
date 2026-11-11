@@ -37,7 +37,7 @@ const MAX_OUTPUT = 3000;
 const MAX_MESSAGES = 60;
 const MAX_CHARS_PER_MESSAGE = 24000;
 const PUBLIC_SIGNAL = "Límite de divulgación — respuesta con información pública";
-const TRUNCATED_NOTE = "\n\n[Respuesta cortada por el límite de tiempo de la plataforma.]";
+const TRUNCATED_NOTE = "\n\n[Respuesta cortada antes de terminar: límite de tiempo o de espacio de salida.]";
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -139,7 +139,11 @@ async function single({ route, key, model, messages, consent, sessionId, deadlin
       send({ type: "error", error: { message: r.failed, retryable: true } });
       return;
     }
-    if (r.truncated || r.failed) send({ type: "frome_truncated" });
+    if (!delivered && (r.truncated || r.stop === "max_tokens")) {
+      send({ type: "error", error: { message: "El modelo no ha llegado a escribir la respuesta dentro del límite. Vuelve a enviar el mensaje.", retryable: false } });
+      return;
+    }
+    if (r.truncated || r.failed || r.stop === "max_tokens") send({ type: "frome_truncated" });
     if (route === "public") send({ type: "frome_signal", text: PUBLIC_SIGNAL });
     const usage = {
       input: r.usage.input + (extraUsage?.input || 0),

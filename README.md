@@ -53,6 +53,11 @@ depende de ocultarlo. Ninguna de estas capas es infalible por separado.
 Netlify limita cada ejecución a 60 segundos; por eso el ciclo avanza una etapa por petición y cada
 llamada deja de leerse antes de ese límite.
 
+Los modelos ofrecidos piensan antes de responder y no envían texto mientras lo hacen; ese tiempo y
+esos tokens cuentan dentro de cada llamada. En esta fase todas las llamadas, la directa y las del
+ciclo, piden el nivel mínimo de razonamiento previo (`output_config.effort`, variable `MODEL_EFFORT`,
+por defecto `low`). Si un modelo rechaza el parámetro, la llamada se repite sin él.
+
 ## Desarrollo local
 
 ```bash

@@ -260,7 +260,7 @@
       text = "Respuesta retenida: lo solicitado forma parte de la configuración interna de FromE Chat y no se divulga. Puedes continuar con tu trabajo.";
       ui.body.classList.add("held");
     } else {
-      if (acc.truncated) text += "\n\n[Respuesta cortada por el límite de tiempo de la plataforma.]";
+      if (acc.truncated) text += "\n\n[Respuesta cortada antes de terminar: límite de tiempo o de espacio de salida.]";
       if (acc.kind === "notice") ui.body.classList.add("held");
     }
     if (acc.held || acc.kind === "notice") ui.body.textContent = text; else paint(ui.body, text);

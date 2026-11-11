@@ -55,7 +55,7 @@ test("una etapa que no termina a tiempo se corta, el ciclo sigue y la entrega lo
     }
     assert.ok(last.text.startsWith("palabra palabra"));
     assert.ok(last.text.length < "palabra ".repeat(40).length);
-    assert.ok(last.text.endsWith("[Respuesta cortada por el límite de tiempo de la plataforma.]"));
+    assert.ok(last.text.endsWith("[Respuesta cortada antes de terminar: límite de tiempo o de espacio de salida.]"));
     assert.ok(Date.now() - t0 < 2500);
   } finally { restore(); }
 });

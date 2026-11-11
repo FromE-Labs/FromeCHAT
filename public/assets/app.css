@@ -167,3 +167,7 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 .body.md th,.body.md td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
 .body.md th{background:var(--panel-2);color:#fff}
 .msg .body.md.streaming::after{content:none}
+
+/* Espera sin texto: el modelo piensa antes de escribir */
+.msg .body.streaming:empty::before{content:"El modelo está pensando antes de escribir…";color:var(--muted,#8a97a4);font-size:14px}
+.msg .body.streaming:empty::after{content:none}

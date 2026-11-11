@@ -4,13 +4,42 @@
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 
+// Nivel de razonamiento previo. Estos modelos piensan antes de responder y, mientras
+// piensan, no envían texto; ese tiempo y esos tokens cuentan dentro del límite de la
+// llamada. Se pide el nivel mínimo, igual en la respuesta directa y en cada etapa del
+// ciclo, para que ambas quepan en el tiempo de ejecución de la plataforma.
+export const EFFORT = process.env.MODEL_EFFORT || "low";
+const noEffort = new Set(); // modelos que han rechazado el parámetro
+
+export function effortFor(model) {
+  return EFFORT && EFFORT !== "default" && !noEffort.has(model) ? { output_config: { effort: EFFORT } } : {};
+}
+
+// Si el proveedor rechaza el parámetro de razonamiento, se repite la llamada sin él.
+export async function postMessages({ key, body, signal }) {
+  const send = (b) =>
+    fetch(ANTHROPIC_URL, {
+      method: "POST",
+      signal,
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION },
+      body: JSON.stringify(b),
+    });
+  let res = await send(body);
+  if (res.status === 400 && body.output_config) {
+    const text = await res.text();
+    if (/effort|output_config/i.test(text)) {
+      noEffort.add(body.model);
+      const { output_config, ...rest } = body;
+      res = await send(rest);
+    } else {
+      res = new Response(text, { status: 400, headers: { "content-type": "application/json" } });
+    }
+  }
+  return res;
+}
+
 export async function openStream({ key, model, system, messages, maxTokens, signal }) {
-  return fetch(ANTHROPIC_URL, {
-    method: "POST",
-    signal,
-    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION },
-    body: JSON.stringify({ model, max_tokens: maxTokens, system, messages, stream: true }),
-  });
+  return postMessages({ key, signal, body: { model, max_tokens: maxTokens, system, messages, stream: true, ...effortFor(model) } });
 }
 
 export async function upstreamError(res) {
@@ -27,7 +56,7 @@ export async function upstreamError(res) {
   };
 }
 
-// Lee el SSE del proveedor. Devuelve { usage, truncated, failed }.
+// Lee el SSE del proveedor. Devuelve { usage, truncated, failed, stop }.
 //  - onText(texto) puede devolver false para dejar de leer.
 //  - deadline (ms epoch): al alcanzarlo se deja de leer y truncated pasa a true.
 export async function readStream(upstream, { onText, onUsage, deadline }) {
@@ -37,6 +66,7 @@ export async function readStream(upstream, { onText, onUsage, deadline }) {
   let buf = "";
   let truncated = false;
   let failed = null;
+  let stop = null;
   let timer = null;
   if (deadline) {
     timer = setTimeout(() => {
@@ -70,9 +100,12 @@ export async function readStream(upstream, { onText, onUsage, deadline }) {
             await reader.cancel().catch(() => {});
             break outer;
           }
-        } else if (ev.type === "message_delta" && ev.usage) {
-          usage.output = ev.usage.output_tokens || usage.output;
-          onUsage?.(usage);
+        } else if (ev.type === "message_delta") {
+          if (ev.delta?.stop_reason) stop = ev.delta.stop_reason;
+          if (ev.usage) {
+            usage.output = ev.usage.output_tokens || usage.output;
+            onUsage?.(usage);
+          }
         } else if (ev.type === "error") {
           failed = ev.error?.message || "error";
         }
@@ -83,7 +116,7 @@ export async function readStream(upstream, { onText, onUsage, deadline }) {
   } finally {
     if (timer) clearTimeout(timer);
   }
-  return { usage, truncated, failed };
+  return { usage, truncated, failed, stop };
 }
 
 // Llamada completa: devuelve el texto acumulado.
@@ -106,5 +139,9 @@ export async function callModel({ key, model, system, messages, maxTokens, deadl
   const r = await readStream(upstream, { onText: (t) => void (text += t), deadline });
   clearTimeout(timer);
   if (r.failed && !text) return { ok: false, status: 0, message: r.failed, auth: false, retryable: true };
-  return { ok: true, text, usage: r.usage, truncated: r.truncated || Boolean(r.failed) };
+  if (!text && (r.truncated || r.stop === "max_tokens")) {
+    return { ok: false, status: 0, message: "El modelo no ha llegado a escribir la respuesta dentro del límite.", auth: false, retryable: true };
+  }
+  // Cortada: por tiempo, por fallo a mitad o por agotar el espacio de salida.
+  return { ok: true, text, usage: r.usage, truncated: r.truncated || Boolean(r.failed) || r.stop === "max_tokens", stop: r.stop };
 }

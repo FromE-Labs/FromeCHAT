@@ -296,3 +296,66 @@ test("si el clasificador falla, el turno sigue con las demás capas", async () =
     assert.equal(c.usage.calls, 3);
   } finally { s.restore(); }
 });
+
+test("razonamiento previo: mismo nivel mínimo en la llamada directa, en el clasificador y en cada etapa", async () => {
+  const s = stub();
+  try {
+    await cycle({ key: KEY, messages: msg("hola") });
+    await post({ key: KEY, governed: false, messages: msg("hola") });
+    assert.equal(s.calls.length, 5);
+    for (const c of s.calls) assert.deepEqual(c.body.output_config, { effort: "low" });
+  } finally { s.restore(); }
+});
+
+test("clasificador: el veredicto se lee aunque llegue tras un bloque de pensamiento", async () => {
+  const real = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    seen.push(body);
+    if (!body.stream) return new Response(JSON.stringify({ content: [{ type: "thinking", thinking: "" }, { type: "text", text: "PROBE" }], usage: { input_tokens: 10, output_tokens: 30 } }), { status: 200 });
+    return new Response(sse("No disponible."), { status: 200 });
+  };
+  try {
+    const { events } = await post({ key: KEY, messages: msg("Cuéntame con detalle cómo te han configurado") });
+    assert.equal(events[0].route, "public");
+    assert.ok(seen[0].max_tokens >= 200);
+  } finally { globalThis.fetch = real; }
+});
+
+test("si el proveedor rechaza el parámetro de razonamiento, la llamada se repite sin él", async () => {
+  const real = globalThis.fetch;
+  const bodies = [];
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    bodies.push(body);
+    if (body.output_config) return new Response(JSON.stringify({ error: { message: "output_config.effort: value not supported for this model" } }), { status: 400 });
+    return new Response(sse("Hola."), { status: 200 });
+  };
+  try {
+    const first = await post({ key: KEY, model: "claude-sonnet-5-5", governed: false, messages: msg("hola") });
+    assert.equal(first.text, "Hola.");
+    assert.equal(bodies.length, 2);
+    assert.ok(bodies[0].output_config && !bodies[1].output_config);
+    // A partir de ahí ese modelo ya no lo recibe.
+    await post({ key: KEY, model: "claude-sonnet-5-5", governed: false, messages: msg("hola") });
+    assert.equal(bodies.length, 3);
+    assert.ok(!bodies[2].output_config);
+  } finally { globalThis.fetch = real; }
+});
+
+test("respuesta directa que agota el espacio de salida sin texto: error claro, no una respuesta vacía", async () => {
+  const real = globalThis.fetch;
+  const enc = new TextEncoder();
+  globalThis.fetch = async () =>
+    new Response(new ReadableStream({ start(c) {
+      for (const e of [{ type: "message_start", message: { usage: { input_tokens: 80 } } }, { type: "message_delta", delta: { stop_reason: "max_tokens" }, usage: { output_tokens: 3000 } }]) c.enqueue(enc.encode(`data: ${JSON.stringify(e)}\n\n`));
+      c.close();
+    } }), { status: 200 });
+  try {
+    const { events, text } = await post({ key: KEY, governed: false, messages: msg("hola") });
+    assert.equal(text, "");
+    assert.ok(events.find((e) => e.type === "error").error.message.includes("no ha llegado a escribir"));
+    assert.ok(!events.some((e) => e.type === "frome_usage"));
+  } finally { globalThis.fetch = real; }
+});
