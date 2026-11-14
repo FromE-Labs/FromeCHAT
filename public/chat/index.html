@@ -12,11 +12,11 @@
   <div class="wrap nav-inner" style="width:calc(100% - 44px);max-width:none">
     <a class="brand" href="/"><span>From<span style="color:var(--accent)">E</span> Chat</span> <span class="by">by From E™ Systems</span></a>
     <div class="navlinks">
-      <span class="pill on" id="pill-gov"><span class="dot"></span> From E™ activa · 7 módulos</span>
+      <span class="pill on" id="pill-gov"><span class="dot"></span> From E™ activa</span>
     </div>
     <div style="display:flex;gap:10px">
       <button class="btn secondary" id="btn-new" type="button">Nueva conversación</button>
-      <a class="btn ghost" href="/">Qué es</a>
+      <a class="btn ghost" href="/">Qué se prueba</a>
     </div>
   </div>
 </nav>
@@ -47,49 +47,58 @@
     </div>
 
     <div>
-      <h4>Arquitectura</h4>
-      <label class="toggle on" id="t-governed">
-        <input type="checkbox" id="governed" checked>
-        <span><b>From E™ Open Core</b><small>Siete módulos aplicados en servidor en cada turno. Apágala para ver el modelo sin gobernanza.</small></span>
+      <h4>La prueba</h4>
+      <label class="toggle on" id="t-compare">
+        <input type="checkbox" id="compare" checked>
+        <span><b>Comparador</b><small>El mismo mensaje y el mismo modelo, con y sin From E™, lado a lado. Es la forma de juzgar la arquitectura en tu propio caso.</small></span>
       </label>
-      <label class="toggle" id="t-compare" style="margin-top:8px">
-        <input type="checkbox" id="compare">
-        <span><b>Comparador</b><small>Misma pregunta con y sin From E™, lado a lado. Consume el doble de tokens.</small></span>
+      <label class="toggle on" id="t-governed" style="margin-top:8px">
+        <input type="checkbox" id="governed" checked>
+        <span><b>From E™ activa</b><small>Cada mensaje se responde en servidor bajo la arquitectura, en una sola llamada y con los módulos que tengas marcados. Con el comparador apagado, puedes desactivarla.</small></span>
       </label>
     </div>
 
+    <div id="mods-box" hidden>
+      <h4>Módulos <span class="beta">beta</span></h4>
+      <p class="state" style="margin:0 0 8px">Enciende o apaga cada módulo y compara el efecto con la respuesta directa.</p>
+      <div class="presets" id="presets"></div>
+      <div id="modules"></div>
+    </div>
+
     <div>
-      <h4>Investigación</h4>
+      <h4>Tu aportación</h4>
       <label class="toggle" id="t-consent">
         <input type="checkbox" id="consent">
-        <span><b>Aportar esta sesión, anonimizada</b><small>Se guarda la conversación, el modelo y la condición (con o sin From E™) con un hash de evidencia. Nunca tu clave, ni correo, ni IP. Puedes apagarlo en cualquier momento; no afecta al funcionamiento.</small></span>
+        <span><b>Aportar esta sesión a la medición</b><small>Este banco de pruebas existe para medir From E™ con casos reales. Si lo activas, se guardan la conversación, el modelo, la condición (con o sin From E™), los módulos activos y el resumen del ciclo, con un hash de evidencia. Nunca tu clave, ni correo, ni IP. No incluyas datos personales de terceros. Es tu decisión en cada sesión y no cambia el funcionamiento.</small></span>
       </label>
+      <p class="state" id="sid" style="margin-top:8px" hidden></p>
     </div>
 
     <div class="foot">FromE Chat by From E™ Systems · <a href="/privacidad/">Privacidad</a> · <a href="https://frome-one.com/es/" target="_blank" rel="noopener">Servicios From E™ ONE</a> · <a href="https://doi.org/10.5281/zenodo.19041459" target="_blank" rel="noopener">Especificación</a></div>
   </aside>
 
   <section class="main" aria-label="Conversación">
-    <div class="banner" id="banner" hidden>
-      <span><b>Comparador activo.</b> Cada mensaje se envía dos veces (con y sin From E™) y gasta el doble de tokens de tu clave.</span>
+    <div class="banner" id="banner">
+      <span><b>Comparador activo.</b> Cada mensaje se responde dos veces con el mismo modelo: con From E™ y sin arquitectura.</span>
       <button class="btn secondary" id="btn-compare-off" type="button">Desactivar</button>
     </div>
-    <div class="panes" id="panes">
+    <div class="panes compare" id="panes">
       <div class="pane" id="pane-a">
-        <div class="pane-head"><b id="head-a">From E™ Open Core</b><span id="meta-a"></span></div>
+        <div class="pane-head"><b id="head-a">Con From E™</b><span id="meta-a"></span></div>
         <div class="thread" id="thread-a">
           <div class="empty" id="empty">
-            <h3>Trabaja. La arquitectura hace el resto.</h3>
-            <p>Plantea un problema real: una decisión, un texto que revisar, un análisis, una duda técnica. From E™ está activa desde el primer mensaje.</p>
+            <h3>Ponla a prueba con un caso tuyo.</h3>
+            <p>Escribe una pregunta real de tu trabajo. Aquí verás la respuesta gobernada por From E™; al lado, la del mismo modelo sin arquitectura.</p>
             <div class="ex">
               <button type="button" data-ex="Revisa este razonamiento y señala cada punto donde doy algo por supuesto sin verificarlo: ">Revisar un razonamiento y separar hecho de supuesto</button>
               <button type="button" data-ex="Tengo que decidir entre dos opciones. Te doy el contexto y quiero que me devuelvas criterios de decisión, no una recomendación: ">Preparar una decisión con criterios, sin que decida por mí</button>
+              <button type="button" data-ex="Te describo un sistema de IA y su uso previsto. Dime qué controles de supervisión humana faltan y qué no puedes afirmar con lo que te doy: ">Evaluar la supervisión humana de un sistema de IA</button>
               <button type="button" data-ex="Resume este documento en tres niveles: lo verificable, lo interpretado por el autor y lo que no se puede saber a partir del texto: ">Resumir en tres niveles: verificable, interpretado, no observable</button>
             </div>
           </div>
         </div>
       </div>
-      <div class="pane" id="pane-b" hidden>
+      <div class="pane" id="pane-b">
         <div class="pane-head"><b>Sin arquitectura</b><span id="meta-b"></span></div>
         <div class="thread" id="thread-b"></div>
       </div>
@@ -100,7 +109,7 @@
         <button class="btn" id="btn-send" type="submit">Enviar</button>
       </div>
       <div class="hint">
-        <span id="hint-left">Tu clave se usa solo en esta llamada. La conversación vive en tu navegador.</span>
+        <span id="hint-left">Tu clave se usa solo en cada petición. La conversación vive en tu navegador y no se guarda: sin cuentas, sin historial.</span>
         <span id="hint-right"></span>
       </div>
     </form>

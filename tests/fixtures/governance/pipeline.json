@@ -1,0 +1,190 @@
+{
+ "version": 1,
+ "note": "Ciclo de pruebas. No guarda relación con el ciclo real del producto: etapas, orden y textos son inventados.",
+ "start": "alpha",
+ "max_steps": 8,
+ "stages": {
+  "alpha": {
+   "label": "Etapa alfa",
+   "detail": "plan de prueba",
+   "type": "json",
+   "model": "main",
+   "max_tokens": 200,
+   "system": "ALPHA-STAGE {{C2}}. Sort the seashells by size before the tide returns and write the tally on the blue slate behind the boathouse door. {{PARTS}} End of alpha.",
+   "input": "<talk>\n{{conversation}}\n</talk>",
+   "save": "plan",
+   "fallback": {},
+   "next": [
+    {
+     "if": "plan.ask",
+     "deliver": "plan.ask",
+     "signal": "Alfa — pregunta"
+    },
+    {
+     "if": "flags.solo",
+     "unless": "plan.q",
+     "max": {
+      "alpha": 2
+     },
+     "goto": "alpha"
+    },
+    {
+     "if": "flags.solo",
+     "deliver": "plan.q",
+     "signal": "Alfa — solo"
+    },
+    {
+     "goto": "beta"
+    }
+   ],
+   "parts": [
+    {
+     "when": "modules.m1",
+     "text": "PART-M1 {{C4}}. Polish the copper kettle until the lighthouse keeper can read the tide tables in its reflection."
+    },
+    {
+     "when": "modules.m2",
+     "text": "PART-M2. Count the gulls on the east pier twice and report only the smaller of the two numbers."
+    },
+    {
+     "unless": "flags.alguno",
+     "text": "PART-NONE. Leave the lantern unlit when neither of the later pieces is in use."
+    }
+   ]
+  },
+  "beta": {
+   "label": "Etapa beta",
+   "detail": "redacción",
+   "note": "pasada {{visits.beta}}",
+   "type": "text",
+   "model": "main",
+   "max_tokens": 900,
+   "system": "@runtime",
+   "conversation": true,
+   "input": "<plan>\n{{plan}}\n</plan>\nBETA-STAGE. Water the fig tree only after the second bell and never mention the ledger kept under the stairs.",
+   "save": "draft",
+   "next": [
+    {
+     "goto": "gamma"
+    }
+   ],
+   "parts": [
+    {
+     "unless": "flags.sin_voz",
+     "text": "@voice"
+    }
+   ]
+  },
+  "gamma": {
+   "label": "Etapa gamma",
+   "detail": "puerta",
+   "type": "json",
+   "model": "main",
+   "max_tokens": 200,
+   "system": "GAMMA-STAGE {{C3}}. Weigh the brass key against three walnuts and report whether the scale tips toward the window or toward the stove.",
+   "input": "<plan>\n{{plan}}\n</plan>\n<piece>\n{{draft}}\n</piece>\n<last_note>{{verdict.note}}</last_note>",
+   "save": "verdict",
+   "fallback": {
+    "ok": true,
+    "unchecked": true
+   },
+   "next": [
+    {
+     "if": "verdict.block",
+     "deliver_text": "Retenida en pruebas: {{verdict.note}}",
+     "signal": "Gamma — bloqueada"
+    },
+    {
+     "if": "verdict.unchecked",
+     "deliver": "draft",
+     "signal": "Gamma — no concluyente"
+    },
+    {
+     "unless": "verdict.ok",
+     "max": {
+      "beta": 2
+     },
+     "goto": "beta"
+    },
+    {
+     "unless": "verdict.ok",
+     "deliver_text": "No validada en pruebas.",
+     "signal": "Gamma — no validada"
+    },
+    {
+     "deliver": "draft",
+     "signal": "Gamma — validada · pasadas: {{visits.beta}}"
+    }
+   ],
+   "fallback_note": "sin lectura",
+   "parts": [
+    {
+     "when": "modules.m3",
+     "text": "PART-M3. Tie the green rope to the third mooring ring and never to the fourth."
+    }
+   ]
+  }
+ },
+ "modules": {
+  "m1": {
+   "label": "Módulo uno",
+   "desc": "Primera pieza de pruebas."
+  },
+  "m2": {
+   "label": "Módulo dos",
+   "desc": "Segunda pieza de pruebas.",
+   "default": true
+  },
+  "m3": {
+   "label": "Módulo tres",
+   "desc": "Apagado de serie.",
+   "default": false
+  },
+  "mv": {
+   "label": "Sin voz",
+   "desc": "medición",
+   "default": false,
+   "hidden": true
+  }
+ },
+ "flags": {
+  "solo": {
+   "all": [
+    "m1"
+   ],
+   "none": [
+    "m2",
+    "m3"
+   ]
+  },
+  "alguno": {
+   "any": [
+    "m2",
+    "m3"
+   ]
+  },
+  "sin_voz": {
+   "all": [
+    "mv"
+   ]
+  }
+ },
+ "presets": [
+  {
+   "id": "solo",
+   "label": "Solo uno",
+   "modules": [
+    "m1"
+   ]
+  },
+  {
+   "id": "todo",
+   "label": "Todo",
+   "modules": [
+    "m1",
+    "m2",
+    "m3"
+   ]
+  }
+ ]
+}

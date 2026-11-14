@@ -1,9 +1,13 @@
 # governance/
 
-Aquí se colocan en el momento del build las especificaciones Open Core de From E™
-(siete archivos `NN-nombre.md`), descargadas desde un repositorio privado por
-`scripts/fetch-governance.mjs` con la variable de entorno `GOVERNANCE_TOKEN`.
+Carpeta vacía en el repositorio. En el build, `scripts/fetch-governance.mjs` coloca aquí:
 
-No se versionan en este repositorio. Las especificaciones están publicadas como
-trabajo científico (DOI 10.5281/zenodo.19041459) y su texto operativo se distribuye
-bajo los términos que fija Volyen Project SL.
+- `runtime.md`: el prompt operativo de FromE Chat, descargado de un repositorio privado
+  con la variable de entorno `GOVERNANCE_TOKEN`.
+- `pipeline.json`: la definición del ciclo por etapas (orden, condiciones y textos), del
+  mismo repositorio privado.
+- `fingerprints.json`: huellas multilingües que usa el filtro de salida.
+- `canary.json`: marcas canario generadas para ese despliegue.
+- `seal.key`: clave del estado sellado, generada para ese despliegue.
+
+Nada de esto se versiona. El prompt operativo y el ciclo son obras no publicadas de Volyen Project SL.

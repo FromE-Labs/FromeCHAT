@@ -1,5 +1,5 @@
 /* FromE Chat — cliente. Sin dependencias. La conversación vive en memoria del
-   navegador; la clave, en memoria de sesión o cifrada en localStorage si el
+   navegador y no se guarda; la clave, en memoria de sesión o cifrada en localStorage si el
    usuario lo pide. Nada de esto se envía a ningún sitio salvo /api/chat. */
 (function () {
   "use strict";
@@ -11,7 +11,7 @@
     pillGov: $("pill-gov"), banner: $("banner"), cmpOff: $("btn-compare-off"),
     panes: $("panes"), paneB: $("pane-b"), threadA: $("thread-a"), threadB: $("thread-b"),
     headA: $("head-a"), metaA: $("meta-a"), metaB: $("meta-b"), empty: $("empty"),
-    form: $("composer"), input: $("input"), send: $("btn-send"), hintR: $("hint-right"), newBtn: $("btn-new"),
+    form: $("composer"), input: $("input"), send: $("btn-send"), hintR: $("hint-right"), newBtn: $("btn-new"), sid: $("sid"), modsBox: $("mods-box"), mods: $("modules"), presets: $("presets"),
   };
 
   /* ---------- estado ---------- */
@@ -70,14 +70,43 @@
     el.send.disabled = !keyOk() || state.busy;
   }
 
-  /* ---------- modelos ---------- */
+  /* ---------- modelos y módulos ---------- */
+  const mods = { defs: [], on: new Set() };
+  function activeModules() { return mods.defs.filter((m) => mods.on.has(m.id)).map((m) => m.id); }
+  function saveModules() { try { localStorage.setItem("fromechat.modules", JSON.stringify(activeModules())); } catch {} }
+  function paintModules() {
+    for (const lab of el.mods.querySelectorAll("label.toggle")) {
+      const inp = lab.querySelector("input"); inp.checked = mods.on.has(inp.dataset.mod); lab.classList.toggle("on", inp.checked);
+    }
+  }
+  function buildModules(d) {
+    mods.defs = d.modules || [];
+    if (!mods.defs.length) return;
+    mods.on = new Set(mods.defs.filter((m) => m.default).map((m) => m.id));
+    try { const saved = JSON.parse(localStorage.getItem("fromechat.modules") || "null"); if (Array.isArray(saved)) mods.on = new Set(saved.filter((id) => mods.defs.some((m) => m.id === id))); } catch {}
+    el.mods.innerHTML = "";
+    for (const m of mods.defs) {
+      const lab = document.createElement("label"); lab.className = "toggle"; lab.style.marginTop = "8px";
+      const inp = document.createElement("input"); inp.type = "checkbox"; inp.dataset.mod = m.id;
+      const sp = document.createElement("span"); const b = document.createElement("b"); b.textContent = m.label; const sm = document.createElement("small"); sm.textContent = m.desc;
+      sp.appendChild(b); sp.appendChild(sm); lab.appendChild(inp); lab.appendChild(sp); el.mods.appendChild(lab);
+      inp.addEventListener("change", () => { if (inp.checked) mods.on.add(m.id); else mods.on.delete(m.id); saveModules(); paintModules(); syncToggles(); });
+    }
+    el.presets.innerHTML = "";
+    for (const pr of d.presets || []) {
+      const bt = document.createElement("button"); bt.type = "button"; bt.textContent = pr.label;
+      bt.addEventListener("click", () => { mods.on = new Set(pr.modules); saveModules(); paintModules(); syncToggles(); });
+      el.presets.appendChild(bt);
+    }
+    el.modsBox.hidden = false; paintModules();
+  }
   async function loadModels() {
     try {
       const r = await fetch("/api/models"); const d = await r.json();
       el.model.innerHTML = "";
       for (const m of d.models) { const o = document.createElement("option"); o.value = m.id; o.textContent = m.label; el.model.appendChild(o); }
       try { const saved = localStorage.getItem("fromechat.model"); if (saved && d.models.some((m) => m.id === saved)) el.model.value = saved; } catch {}
-      el.pillGov.innerHTML = '<span class="dot"></span> From E™ activa · ' + d.openCoreModules + " módulos";
+      buildModules(d);
     } catch {
       el.model.innerHTML = '<option value="claude-opus-5-5">Claude Opus 5.5</option>';
     }
@@ -96,68 +125,196 @@
     if (cmp) { el.governed.checked = true; el.governed.disabled = true; el.tGov.classList.add("on"); } else { el.governed.disabled = false; }
     const gov = el.governed.checked;
     el.pillGov.classList.toggle("on", gov);
-    el.pillGov.innerHTML = gov ? '<span class="dot"></span> From E™ activa · 7 módulos' : '<span class="dot"></span> Sin arquitectura';
-    el.headA.textContent = gov ? "From E™ Open Core" : "Sin arquitectura";
-    el.hintR.textContent = cmp ? "Coste: ×2 tokens por mensaje" : "";
-    el.hintR.className = cmp ? "cost" : "";
+    el.pillGov.innerHTML = gov ? '<span class="dot"></span> From E™ activa' : '<span class="dot"></span> Sin arquitectura';
+    el.headA.textContent = gov ? "Con From E™" : "Sin arquitectura";
+    el.hintR.textContent = gov ? (cmp ? "Coste por mensaje: una llamada gobernada más una directa; con el ciclo por etapas, varias" : "Coste por mensaje: una llamada gobernada; con el ciclo por etapas, varias") : "";
+    el.modsBox.classList.toggle("off", !gov);
+    for (const inp of el.mods.querySelectorAll("input")) inp.disabled = !gov;
+    for (const bt of el.presets.querySelectorAll("button")) bt.disabled = !gov;
+    el.hintR.className = gov ? "cost" : "";
+    el.sid.hidden = !el.consent.checked;
+    el.sid.textContent = "Identificador de esta sesión: " + state.sessionId;
   }
 
   /* ---------- render ---------- */
   function addMsg(thread, role, text, opts = {}) {
     const m = document.createElement("div"); m.className = "msg " + role;
     const who = document.createElement("div"); who.className = "who"; who.textContent = role === "user" ? "Tú" : (opts.label || "Modelo");
-    const body = document.createElement("div"); body.className = "body" + (opts.streaming ? " streaming" : "") + (opts.error ? " error" : "");
+    m.appendChild(who);
+    let trace = null;
+    if (opts.trace) { trace = document.createElement("ol"); trace.className = "trace"; m.appendChild(trace); }
+    const body = document.createElement("div"); body.className = "body" + (opts.streaming ? " streaming" : "");
     body.textContent = text;
-    m.appendChild(who); m.appendChild(body); thread.appendChild(body.parentNode);
+    m.appendChild(body); thread.appendChild(m);
     thread.scrollTop = thread.scrollHeight;
-    return body;
-  }
-  function finalize(body, text) {
-    body.classList.remove("streaming");
-    // Separa la línea de señal del Signal System™, si existe, para mostrarla aparte.
-    const m = text.match(/\n?(⟶ Signal:[^\n]*)\s*$/);
-    if (m) {
-      body.textContent = text.slice(0, m.index).replace(/\s+$/, "");
-      const s = document.createElement("span"); s.className = "signal"; s.textContent = m[1];
-      body.appendChild(s);
-    } else body.textContent = text;
+    return { body, trace, thread };
   }
 
+  // Traza del ciclo: una fila por etapa, con su estado y su nota.
+  function traceRow(ui, id, label, detail) {
+    if (!ui.trace) return;
+    const last = ui.trace.lastElementChild;
+    if (last && last.dataset.id === id && last.classList.contains("run")) return; // reintento de la misma etapa
+    const li = document.createElement("li"); li.className = "run"; li.dataset.id = id;
+    const b = document.createElement("b"); b.textContent = label || id; li.appendChild(b);
+    if (detail) { const d = document.createElement("span"); d.textContent = detail; li.appendChild(d); }
+    ui.trace.appendChild(li); ui.thread.scrollTop = ui.thread.scrollHeight;
+  }
+  function traceDone(ui, id, note, cls) {
+    if (!ui.trace) return;
+    const last = ui.trace.lastElementChild;
+    if (!last || last.dataset.id !== id) return;
+    last.className = cls || "ok";
+    if (note) { const n = document.createElement("em"); n.textContent = note; last.appendChild(n); }
+  }
+
+  /* ---------- formato (Markdown mínimo y seguro) ---------- */
+  // Todo el texto se escapa antes de aplicar formato: solo salen las etiquetas de aquí.
+  const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  function inline(t) {
+    const codes = [];
+    t = esc(t).replace(/`([^`\n]+)`/g, (_, c) => { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
+    t = t.replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*([^*\s][^*\n]*?)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
+    t = t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    return t.replace(/\u0000(\d+)\u0000/g, (_, i) => "<code>" + codes[Number(i)] + "</code>");
+  }
+  function md(text) {
+    const lines = text.replace(/\r/g, "").split("\n");
+    const out = []; let para = [], list = null, i = 0;
+    const flushP = () => { if (para.length) { out.push("<p>" + para.map(inline).join("<br>") + "</p>"); para = []; } };
+    const flushL = () => { if (list) { out.push("<" + list.tag + ">" + list.items.map((x) => "<li" + (x.deep ? ' class="deep"' : "") + ">" + inline(x.t) + "</li>").join("") + "</" + list.tag + ">"); list = null; } };
+    const flush = () => { flushP(); flushL(); };
+    for (; i < lines.length; i++) {
+      const ln = lines[i]; let m;
+      if (/^\s*```/.test(ln)) {
+        flush(); const buf = []; i++;
+        while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++]);
+        out.push("<pre><code>" + esc(buf.join("\n")) + "</code></pre>"); continue;
+      }
+      if (/^\s*\|.*\|\s*$/.test(ln)) {
+        flush(); const rows = [];
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(lines[i++]); i--;
+        const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+        const body = rows.filter((r) => !/^\s*\|[\s:|-]+\|\s*$/.test(r));
+        out.push('<div class="tw"><table>' + body.map((r, k) => "<tr>" + cells(r).map((c) => (k === 0 && body.length < rows.length ? "<th>" : "<td>") + inline(c) + (k === 0 && body.length < rows.length ? "</th>" : "</td>")).join("") + "</tr>").join("") + "</table></div>"); continue;
+      }
+      if ((m = ln.match(/^\s{0,3}(#{1,6})\s+(.*)$/))) { flush(); out.push("<h" + Math.min(6, m[1].length + 2) + ">" + inline(m[2].replace(/\s+#+\s*$/, "")) + "</h" + Math.min(6, m[1].length + 2) + ">"); continue; }
+      if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(ln)) { flush(); out.push("<hr>"); continue; }
+      if ((m = ln.match(/^(\s*)([-*+]|\d{1,3}[.)])\s+(.*)$/))) {
+        flushP(); const tag = /\d/.test(m[2]) ? "ol" : "ul"; const deep = m[1].length >= 2;
+        if (list && list.tag !== tag && !deep) flushL();
+        if (!list) list = { tag, items: [] };
+        list.items.push({ t: m[3], deep }); continue;
+      }
+      if (/^\s{0,3}>/.test(ln)) {
+        // Líneas de cita seguidas forman una sola cita; una línea «>» vacía separa párrafos.
+        flush(); const ps = [[]];
+        while (i < lines.length && (m = lines[i].match(/^\s{0,3}>\s?(.*)$/))) { if (m[1].trim()) ps[ps.length - 1].push(m[1]); else ps.push([]); i++; }
+        i--;
+        out.push("<blockquote>" + ps.filter((x) => x.length).map((x) => "<p>" + x.map(inline).join("<br>") + "</p>").join("") + "</blockquote>"); continue;
+      }
+      if (!ln.trim()) { flush(); continue; }
+      if (list && /^\s{2,}\S/.test(ln)) { list.items[list.items.length - 1].t += " " + ln.trim(); continue; }
+      flushL(); para.push(ln);
+    }
+    flush();
+    return out.join("");
+  }
+  function paint(body, text) { body.classList.add("md"); body.innerHTML = md(text); }
+
   /* ---------- envío ---------- */
-  async function streamOne({ governed, messages, thread, label, meta }) {
-    const body = addMsg(thread, "assistant", "", { streaming: true, label });
-    const t0 = performance.now();
-    let text = "", inTok = null, outTok = null;
-    const res = await fetch("/api/chat", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key: el.key.value.trim(), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId }),
-    });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Una petición a /api/chat. En modo gobernado ejecuta una etapa del ciclo.
+  // Devuelve { cont } si hay más etapas, { done } si hay entrega, o { error, retry }.
+  async function step({ governed, messages, token, acc, ui, modules }) {
+    let res;
+    try {
+      res = await fetch("/api/chat", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: el.key.value.trim(), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId, state: token || undefined, modules: governed && mods.defs.length ? modules : undefined }),
+      });
+    } catch { return { error: "No hay conexión con el servidor.", retry: true }; }
     if (!res.ok) {
       let msg = "Error " + res.status;
       try { const e = await res.json(); if (e.message) msg = e.message; } catch {}
-      body.classList.remove("streaming"); body.classList.add("error"); body.textContent = msg;
-      throw new Error(msg);
+      if (res.status === 429) msg = "Demasiadas peticiones seguidas. Espera un minuto.";
+      return { error: msg, retry: res.status === 429 || res.status >= 500, wait: res.status === 429 ? 8000 : 0 };
     }
     const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
-    while (true) {
-      const { done, value } = await reader.read(); if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf("\n\n")) >= 0) {
-        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
-        const line = chunk.split("\n").find((l) => l.startsWith("data: ")); if (!line) continue;
-        try {
-          const ev = JSON.parse(line.slice(6));
-          if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") { text += ev.delta.text; body.textContent = text; thread.scrollTop = thread.scrollHeight; }
-          if (ev.type === "message_start" && ev.message && ev.message.usage) inTok = ev.message.usage.input_tokens + (ev.message.usage.cache_read_input_tokens || 0) + (ev.message.usage.cache_creation_input_tokens || 0);
-          if (ev.type === "message_delta" && ev.usage) outTok = ev.usage.output_tokens;
-          if (ev.type === "error") throw new Error(ev.error && ev.error.message || "error");
-        } catch (e) { if (e.message !== "error" && !(e instanceof SyntaxError)) throw e; }
+    let cont = null, done = false, err = null;
+    try {
+      while (true) {
+        const r = await reader.read(); if (r.done) break;
+        buf += dec.decode(r.value, { stream: true });
+        let i;
+        while ((i = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+          const line = chunk.split("\n").find((l) => l.startsWith("data: ")); if (!line) continue;
+          let ev; try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+          if (ev.type === "frome_route") {
+            if (!acc.route) { acc.route = ev.route; if (governed) traceDone(ui, "gate", ev.route === "public" ? "ruta pública" : ""); }
+          } else if (ev.type === "frome_modules") {
+            if (ui.trace && !ui.trace.querySelector("li.mods")) {
+              const li = document.createElement("li"); li.className = "ok mods"; li.dataset.id = "mods";
+              const b = document.createElement("b"); b.textContent = "Módulos"; const sp = document.createElement("span"); sp.textContent = ev.labels.length ? ev.labels.join(" · ") : "ninguno (reglas base)";
+              li.appendChild(b); li.appendChild(sp); ui.trace.insertBefore(li, ui.trace.firstChild);
+            }
+          } else if (ev.type === "frome_stage") {
+            if (ev.status === "running") traceRow(ui, ev.id, ev.label, ev.detail); else traceDone(ui, ev.id, ev.note);
+          } else if (ev.type === "frome_continue") cont = ev.state;
+          else if (ev.type === "frome_deliver") acc.kind = ev.kind;
+          else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") {
+            acc.text += ev.delta.text; ui.body.hidden = false;
+            if (!ui.raf) ui.raf = requestAnimationFrame(() => { ui.raf = 0; if (ui.body.classList.contains("streaming")) { paint(ui.body, acc.text); ui.thread.scrollTop = ui.thread.scrollHeight; } });
+          } else if (ev.type === "frome_signal") acc.signal = ev.text;
+          else if (ev.type === "frome_usage") { acc.usage = ev.usage; done = true; }
+          else if (ev.type === "frome_truncated") acc.truncated = true;
+          else if (ev.type === "frome_blocked") { acc.held = true; done = true; }
+          else if (ev.type === "error") err = { error: (ev.error && ev.error.message) || "Error", retry: Boolean(ev.error && ev.error.retryable) };
+        }
       }
+    } catch { err = err || { error: "Se ha interrumpido la respuesta.", retry: true }; }
+    if (err) return err;
+    if (cont) return { cont };
+    if (done) return { done: true };
+    return { error: "La etapa no ha terminado a tiempo.", retry: true };
+  }
+
+  async function ask({ governed, messages, thread, label, meta }) {
+    const ui = addMsg(thread, "assistant", "", { streaming: true, label, trace: governed });
+    const acc = { text: "", signal: "", kind: "answer", held: false, truncated: false, usage: null, route: null };
+    const t0 = performance.now();
+    if (governed) { ui.body.hidden = true; traceRow(ui, "gate", "Comprobación de entrada", ""); }
+    let token = null, tries = 0;
+    const modules = activeModules(); // fijados para toda la respuesta
+    for (;;) {
+      const r = await step({ governed, messages, token, acc, ui, modules });
+      if (r.cont) { token = r.cont; tries = 0; continue; }
+      if (r.done) break;
+      // Solo se reintenta una etapa del ciclo: su estado anterior sigue siendo válido.
+      if (r.retry && governed && !acc.text && tries < 2) { tries++; await sleep(r.wait || 1500 * tries); continue; }
+      if (ui.trace && ui.trace.lastElementChild) ui.trace.lastElementChild.className = "fail";
+      ui.body.hidden = false; ui.body.classList.remove("streaming"); ui.body.classList.add("error");
+      ui.body.textContent = acc.text ? acc.text + "\n\n[" + r.error + "]" : r.error;
+      throw new Error(r.error);
     }
-    finalize(body, text);
+    ui.body.hidden = false; ui.body.classList.remove("streaming");
+    let text = acc.text;
+    if (acc.held) {
+      // El servidor ha retenido la respuesta: se descarta lo mostrado.
+      text = "Respuesta retenida: lo solicitado forma parte de la configuración interna de FromE Chat y no se divulga. Puedes continuar con tu trabajo.";
+      ui.body.classList.add("held");
+    } else {
+      if (acc.truncated) text += "\n\n[Respuesta cortada antes de terminar: límite de tiempo o de espacio de salida.]";
+      if (acc.kind === "notice") ui.body.classList.add("held");
+    }
+    if (acc.held || acc.kind === "notice") ui.body.textContent = text; else paint(ui.body, text);
+    if (acc.signal && !acc.held) { const sg = document.createElement("span"); sg.className = "signal"; sg.textContent = "⟶ Signal: " + acc.signal; ui.body.appendChild(sg); }
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
-    meta.textContent = (inTok != null ? inTok + " in · " : "") + (outTok != null ? outTok + " out · " : "") + secs + " s";
+    const u = acc.usage;
+    meta.textContent = (u ? u.calls + (u.calls === 1 ? " llamada · " : " llamadas · ") + u.input + " in · " + u.output + " out · " : "") + secs + " s";
+    ui.thread.scrollTop = ui.thread.scrollHeight;
     return text;
   }
 
@@ -170,24 +327,26 @@
     const cmp = el.compare.checked, gov = el.governed.checked;
     addMsg(el.threadA, "user", text);
     state.history.push({ role: "user", content: text });
-    const jobs = [streamOne({ governed: gov, messages: state.history, thread: el.threadA, label: gov ? "From E™ Open Core" : "Sin arquitectura", meta: el.metaA })
-      .then((t) => state.history.push({ role: "assistant", content: t }))];
+    const drop = (h) => { if (h.length && h[h.length - 1].role === "user") h.pop(); };
+    const jobs = [ask({ governed: gov, messages: state.history.slice(), thread: el.threadA, label: gov ? "Con From E™" : "Sin arquitectura", meta: el.metaA })
+      .then((t) => state.history.push({ role: "assistant", content: t }), () => drop(state.history))];
     if (cmp) {
       addMsg(el.threadB, "user", text);
       state.historyB.push({ role: "user", content: text });
-      jobs.push(streamOne({ governed: false, messages: state.historyB, thread: el.threadB, label: "Sin arquitectura", meta: el.metaB })
-        .then((t) => state.historyB.push({ role: "assistant", content: t })));
+      jobs.push(ask({ governed: false, messages: state.historyB.slice(), thread: el.threadB, label: "Sin arquitectura", meta: el.metaB })
+        .then((t) => state.historyB.push({ role: "assistant", content: t }), () => drop(state.historyB)));
     }
     try { await Promise.all(jobs); }
-    catch { /* el error ya está pintado en el hilo */ state.history = state.history.filter((m, i, a) => !(i === a.length - 1 && m.role === "user")); state.historyB = state.historyB.filter((m, i, a) => !(i === a.length - 1 && m.role === "user")); }
     finally { state.busy = false; el.input.disabled = false; refreshKeyState(); el.input.focus(); }
   }
 
   function reset() {
+    if (state.busy) return;
     state.history = []; state.historyB = []; state.sessionId = cryptoId();
     el.threadA.innerHTML = ""; el.threadB.innerHTML = ""; el.metaA.textContent = ""; el.metaB.textContent = "";
-    const e = document.createElement("div"); e.className = "empty"; e.innerHTML = "<h3>Nueva conversación.</h3><p>El hilo anterior se ha descartado de tu navegador. La arquitectura sigue activa.</p>";
+    const e = document.createElement("div"); e.className = "empty"; e.innerHTML = "<h3>Nueva conversación.</h3><p>El hilo anterior se ha descartado de tu navegador. No queda guardado en ningún sitio.</p>";
     el.threadA.appendChild(e); el.empty = e;
+    syncToggles();
   }
 
   /* ---------- eventos ---------- */
