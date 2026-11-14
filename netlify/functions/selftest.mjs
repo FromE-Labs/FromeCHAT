@@ -130,9 +130,13 @@ export default async (req, context) => {
   // «ciclo»: solo el lado gobernado y sin comprobación de entrada, para probar las capas
   // interiores con mensajes que la entrada desviaría a la ruta pública.
   const forced = param("side") === "ciclo";
-  const side = forced ? "gov" : ["gov", "base"].includes(param("side")) ? param("side") : "both";
+  // «voz»: solo una llamada directa a la que se añade la voz de la autora, sin gobernanza.
+  // Con el módulo oculto que quita la voz en el lado gobernado, completa las cuatro
+  // celdas: control, solo voz, solo arquitectura y combinado.
+  const voiceOnly = param("side") === "voz" && Boolean(g.voice);
+  const side = forced ? "gov" : voiceOnly ? "base" : ["gov", "base"].includes(param("side")) ? param("side") : "both";
   const messages = [{ role: "user", content: q }];
-  const jobId = createHash("sha256").update([param("id") || "", model, modules.join(","), side + (forced ? "!" : ""), q].join("\n")).digest("hex").slice(0, 32);
+  const jobId = createHash("sha256").update([param("id") || "", model, modules.join(","), side + (forced ? "!" : "") + (voiceOnly ? "+voz" : ""), q].join("\n")).digest("hex").slice(0, 32);
 
   let job = await loadJob(g, jobId);
   if (!job) {
@@ -153,9 +157,12 @@ export default async (req, context) => {
     const B = job.base;
     if (left() < MIN_START_MS) return;
     const s = Date.now();
-    const r = await callModel({ key, model, system: UNGOVERNED_SYSTEM, messages, maxTokens: MAX_OUTPUT, deadline });
+    const system = voiceOnly ? [{ type: "text", text: UNGOVERNED_SYSTEM[0].text + "\n\n" + g.voice }] : UNGOVERNED_SYSTEM;
+    const r = await callModel({ key, model, system, messages, maxTokens: MAX_OUTPUT, deadline });
     B.ms += Date.now() - s;
-    if (r.ok) B.out = { text: r.text, usage: { ...r.usage, calls: 1 }, truncated: r.truncated };
+    // La llamada con voz lleva material propio: su salida pasa también por el filtro.
+    if (r.ok && voiceOnly && inspect(g, r.text).blocked) B.out = { error: "retenida por el filtro de salida" };
+    else if (r.ok) B.out = { text: r.text, usage: { ...r.usage, calls: 1 }, truncated: r.truncated };
     else if (r.retryable && B.retries < 2) B.retries += 1;
     else B.out = { error: r.message };
     await save();
@@ -239,7 +246,7 @@ export default async (req, context) => {
     out.push("");
   }
   if (B) {
-    out.push(`=== SIN ARQUITECTURA · ${B.out?.usage ? line(B.out.usage) : "-"} · ${(B.ms / 1000).toFixed(1)} s`);
+    out.push(`=== ${voiceOnly ? "SOLO VOZ (sin gobernanza)" : "SIN ARQUITECTURA"} · ${B.out?.usage ? line(B.out.usage) : "-"} · ${(B.ms / 1000).toFixed(1)} s`);
     if (!B.out) out.push("EN CURSO");
     else if (B.out.error) out.push("ERROR: " + B.out.error);
     else out.push((B.out.truncated ? "CORTADA\n" : "") + `${B.out.text.length} caracteres`, "--- respuesta", B.out.text);

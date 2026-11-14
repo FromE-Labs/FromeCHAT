@@ -79,6 +79,9 @@ La pregunta puede ir también como `caso.<nombre>`, que se busca en un archivo d
 repositorio privado (opcional). La respuesta gobernada lleva una línea `FILTRO` con lo que
 el filtro de salida ve en ella. Con `ciclo` en lugar de `gov` se entra al ciclo sin la comprobación de entrada, para probar
 las capas interiores; la línea `INTERNO` dice qué ve el filtro en el material de cada etapa.
+Para separar el efecto de la voz del de la gobernanza hay dos celdas más: el lado `voz` lanza una
+llamada directa con la voz y sin gobernanza, y un módulo oculto de medición quita la voz del lado
+gobernado. Los módulos ocultos no aparecen en `/api/models`.
 En la ruta, los módulos van separados por punto (`todos` usa los de por defecto, `ninguno`
 no activa ninguno). Un caso es un trabajo reanudable: cada petición avanza las etapas que
 caben en una ejecución, guarda el estado sellado y devuelve lo que hay; mientras no termina,

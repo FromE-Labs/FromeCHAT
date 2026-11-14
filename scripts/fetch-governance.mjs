@@ -14,7 +14,7 @@ const REF = process.env.GOVERNANCE_REF || "main";
 const TOKEN = process.env.GOVERNANCE_TOKEN;
 const OUT = new URL("../governance/", import.meta.url);
 const FILES = ["runtime.md", "pipeline.json", "fingerprints.json"];
-const OPTIONAL = ["cases.json"]; // casos de la entrada de pruebas; si no está, se sigue
+const OPTIONAL = ["cases.json", "voice.md"]; // casos de la entrada de pruebas; si no está, se sigue
 
 // Palabra inventada y pronunciable: sobrevive a una traducción como si fuera un nombre propio.
 function canaryWord() {

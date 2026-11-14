@@ -45,3 +45,10 @@ test("el filtro de salida cubre también las partes de cada módulo, estén acti
   assert.ok(has("Tie the green rope to the third mooring ring and never to the fourth"));
   assert.ok(pipeline.stages.alpha.parts[0].text.includes(canaries[3]));
 });
+
+test("los módulos ocultos no se publican en la lista de módulos", async () => {
+  const { default: models } = await import("../netlify/functions/models.mjs");
+  const data = await (await models()).json();
+  assert.ok(data.modules.length >= 3);
+  assert.ok(!data.modules.some((m) => m.id === "mv"), "el módulo de medición no aparece");
+});

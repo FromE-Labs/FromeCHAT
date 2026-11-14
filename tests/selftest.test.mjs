@@ -16,15 +16,17 @@ function sse(text) {
 function stub() {
   const real = globalThis.fetch;
   const keys = [];
+  const systems = [];
   globalThis.fetch = async (url, init) => {
     const body = JSON.parse(init.body);
     keys.push(init.headers["x-api-key"]);
     if (!body.stream) return new Response(JSON.stringify({ content: [{ type: "text", text: "SAFE" }], usage: { input_tokens: 10, output_tokens: 1 } }), { status: 200 });
     const sys = body.system.map((b) => b.text).join("\n");
+    systems.push(sys);
     const text = sys.includes("ALPHA-STAGE") ? '{"goal":"x","q":"¿Fecha?"}' : sys.includes("GAMMA-STAGE") ? '{"ok":true}' : sys.includes("BETA-STAGE") ? "Respuesta gobernada." : "Respuesta directa.";
     return new Response(sse(text), { status: 200 });
   };
-  return { keys, restore: () => (globalThis.fetch = real) };
+  return { keys, systems, restore: () => (globalThis.fetch = real) };
 }
 const call = (url, ctx) => selftest(new Request(url), ctx);
 
@@ -99,6 +101,23 @@ test("lado «ciclo»: entra al ciclo sin comprobación de entrada e informa del 
     assert.ok(text.includes("ruta governed (forzada, sin comprobación de entrada)") && text.includes("3 llamadas"));
     assert.ok(/INTERNO: .*limpio 0\/\d+/.test(text) && text.includes("Respuesta gobernada.") && !text.includes("SIN ARQUITECTURA"));
     assert.equal(s.keys.length, 3, "no se llama al clasificador de entrada");
+  } finally { s.restore(); }
+});
+
+test("celdas de medición: lado «voz» sin gobernanza y módulo oculto que quita la voz", async () => {
+  process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
+  const s = stub();
+  try {
+    const solo = await (await call(`${PREVIEW}/${TOKEN}/51/todos/caso.uno/x/voz`)).text();
+    assert.ok(solo.includes("=== SOLO VOZ (sin gobernanza)") && solo.includes("Respuesta directa.") && !solo.includes("CON FROM E"));
+    assert.ok(s.systems.some((x) => x.includes("Voz de prueba") && x.includes("helpful assistant")), "la llamada directa lleva la voz");
+    const n = s.systems.length;
+    const sin = await (await call(`${PREVIEW}/${TOKEN}/52/m1.m2.mv/caso.uno/x/gov`)).text();
+    assert.ok(sin.includes("Sin voz") && sin.includes("Respuesta gobernada."));
+    assert.ok(!s.systems.slice(n).some((x) => x.includes("Voz de prueba")), "con el módulo oculto ninguna etapa lleva la voz");
+    const m = s.systems.length;
+    await (await call(`${PREVIEW}/${TOKEN}/53/m1.m2/caso.uno/x/gov`)).text();
+    assert.ok(s.systems.slice(m).some((x) => x.includes("Voz de prueba")), "por defecto la voz está activa");
   } finally { s.restore(); }
 });
 
