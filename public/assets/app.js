@@ -127,7 +127,7 @@
     el.pillGov.classList.toggle("on", gov);
     el.pillGov.innerHTML = gov ? '<span class="dot"></span> From E™ activa' : '<span class="dot"></span> Sin arquitectura';
     el.headA.textContent = gov ? "Con From E™" : "Sin arquitectura";
-    el.hintR.textContent = gov ? (cmp ? "Coste por mensaje: una llamada gobernada más una directa; con el ciclo por etapas, varias" : "Coste por mensaje: una llamada gobernada; con el ciclo por etapas, varias") : "";
+    el.hintR.textContent = gov ? (cmp ? "Coste por mensaje: 3 llamadas (comprobación de entrada, generación gobernada y respuesta directa); con el ciclo por etapas, más" : "Coste por mensaje: 2 llamadas (comprobación de entrada y generación gobernada); con el ciclo por etapas, más") : "";
     el.modsBox.classList.toggle("off", !gov);
     for (const inp of el.mods.querySelectorAll("input")) inp.disabled = !gov;
     for (const bt of el.presets.querySelectorAll("button")) bt.disabled = !gov;
@@ -285,7 +285,7 @@
     const ui = addMsg(thread, "assistant", "", { streaming: true, label, trace: governed });
     const acc = { text: "", signal: "", kind: "answer", held: false, truncated: false, usage: null, route: null };
     const t0 = performance.now();
-    if (governed) { ui.body.hidden = true; traceRow(ui, "gate", "Comprobación de entrada", ""); }
+    if (governed) { ui.body.hidden = true; traceRow(ui, "gate", "Comprobación de entrada", "llamada breve a un modelo rápido"); }
     let token = null, tries = 0;
     const modules = activeModules(); // fijados para toda la respuesta
     for (;;) {
