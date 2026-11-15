@@ -93,6 +93,24 @@ test("la pregunta puede venir por nombre de caso guardado; informa del filtro", 
   } finally { s.restore(); }
 });
 
+test("un caso puede ser una conversación ya empezada: se envían todos sus turnos", async () => {
+  process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
+  assert.equal((await call(`${PREVIEW}/${TOKEN}/32/m1.m2/caso.rota/x/base`)).status, 400, "debe acabar en un turno del usuario");
+  const s = stub();
+  const stubbed = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    if (body.stream) seen.push(body.messages.map((m) => m.role + ":" + (typeof m.content === "string" ? m.content : m.content.map((p) => p.text).join(""))));
+    return stubbed(url, init);
+  };
+  try {
+    const text = await (await call(`${PREVIEW}/${TOKEN}/32/m1.m2/caso.charla/x/base`)).text();
+    assert.ok(text.includes("CASO: charla") && text.includes("Respuesta directa."));
+    assert.deepEqual(seen[0], ["user:primer turno", "assistant:respuesta previa", "user:turno final"]);
+  } finally { s.restore(); }
+});
+
 test("lado «ciclo»: entra al ciclo sin comprobación de entrada e informa del material interno", async () => {
   process.env.SELFTEST_KEY = KEY; process.env.SELFTEST_TOKEN = TOKEN;
   const s = stub();

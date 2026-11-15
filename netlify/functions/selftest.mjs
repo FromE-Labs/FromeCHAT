@@ -120,7 +120,19 @@ export default async (req, context) => {
 
   const g = loadGovernance();
   let q = (param("q") || "").slice(0, 8000).trim();
-  if (param("caso")) q = String(g.cases?.[param("caso")] || "").trim();
+  // Un caso puede ser una pregunta o una conversación ya empezada: una lista de turnos
+  // { role, content } que termina en un mensaje del usuario.
+  let turns = null;
+  if (param("caso")) {
+    const c = g.cases?.[param("caso")];
+    if (Array.isArray(c)) {
+      turns = c
+        .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
+      if (!turns.length || turns[0].role !== "user" || turns[turns.length - 1].role !== "user") turns = null;
+      q = turns ? turns.map((m) => m.role + ": " + m.content).join("\n") : "";
+    } else q = String(c || "").trim();
+  }
   if (!q) return new Response("Falta la pregunta o el caso no existe.", { status: 400 });
   const t0 = Date.now();
   const deadline = t0 + BUDGET_MS;
@@ -135,7 +147,7 @@ export default async (req, context) => {
   // celdas: control, solo voz, solo arquitectura y combinado.
   const voiceOnly = param("side") === "voz" && Boolean(g.voice);
   const side = forced ? "gov" : voiceOnly ? "base" : ["gov", "base"].includes(param("side")) ? param("side") : "both";
-  const messages = [{ role: "user", content: q }];
+  const messages = turns || [{ role: "user", content: q }];
   const jobId = createHash("sha256").update([param("id") || "", model, modules.join(","), side + (forced ? "!" : "") + (voiceOnly ? "+voz" : ""), q].join("\n")).digest("hex").slice(0, 32);
 
   let job = await loadJob(g, jobId);
