@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Revisión de sesiones — FromE Chat</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<nav aria-label="Navegación principal">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/"><span>From<span style="color:var(--accent)">E</span> Chat</span> <span class="by">Revisión de sesiones</span></a>
+    <div style="display:flex;gap:10px">
+      <button class="btn secondary" id="btn-export" type="button" hidden>Copiar mis correcciones</button>
+      <button class="btn ghost" id="btn-out" type="button" hidden>Salir</button>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap rv">
+  <section class="rv-gate" id="gate">
+    <h2>Sesiones aportadas por los usuarios.</h2>
+    <p class="lead">Página privada. Aquí lees los turnos que alguien decidió aportar y escribes, junto a la respuesta de la arquitectura, lo que le habrías dicho al modelo en ese punto. Tus correcciones son la materia de los ejemplos nuevos de cada módulo.</p>
+    <form id="gate-form" class="rv-gate-form">
+      <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Contraseña de revisión" aria-label="Contraseña de revisión">
+      <button class="btn" type="submit">Entrar</button>
+    </form>
+    <p class="state" id="gate-state"></p>
+  </section>
+
+  <section id="board" hidden>
+    <div class="rv-bar">
+      <span id="count" class="state"></span>
+      <label class="rv-check"><input type="checkbox" id="f-pending"> Solo sin revisar</label>
+      <label class="rv-check"><input type="checkbox" id="f-fail"> Solo marcadas como fallo</label>
+    </div>
+    <div id="export-box" hidden>
+      <p class="state">Copiado. Pégalo en la conversación de trabajo para convertirlo en ejemplos. Solo contiene lo que has escrito tú, no las conversaciones.</p>
+      <textarea id="export-text" readonly rows="8" aria-label="Correcciones para copiar"></textarea>
+    </div>
+    <div id="list"></div>
+    <p class="state" id="empty" hidden>Todavía no hay sesiones aportadas.</p>
+    <button class="btn secondary" id="btn-more" type="button" hidden>Cargar más</button>
+  </section>
+</main>
+
+<script src="/assets/review.js" defer></script>
+</body>
+</html>
