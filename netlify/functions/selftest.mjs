@@ -47,7 +47,7 @@ async function underCap() {
   return true;
 }
 
-const line = (u) => `${u.calls ?? 1} llamadas · ${u.input} in · ${u.output} out`;
+const line = (u) => `${u.calls ?? 1} llamadas · ${u.input} in${u.cached || u.cacheWrite ? ` (caché: ${u.cached || 0} leídos, ${u.cacheWrite || 0} escritos)` : ""} · ${u.output} out`;
 
 // Un caso es un trabajo reanudable. Una respuesta gobernada completa no cabe en una
 // sola ejecución de la plataforma, así que cada petición avanza lo que le da tiempo,
@@ -225,7 +225,7 @@ export default async (req, context) => {
   const B = job.base;
   if (G) {
     const u = G.out?.usage || G.st?.usage || null;
-    const usage = u ? { input: u.input + (G.gateUsage?.input || 0), output: u.output + (G.gateUsage?.output || 0), calls: (u.calls || 0) + (G.gate && !G.forced ? 1 : 0) } : null;
+    const usage = u ? { input: u.input + (G.gateUsage?.input || 0), output: u.output + (G.gateUsage?.output || 0), calls: (u.calls || 0) + (G.gate && !G.forced ? 1 : 0), cached: u.cached || 0, cacheWrite: u.cacheWrite || 0 } : null;
     out.push(`=== CON FROM E · ruta ${G.route || "-"}${G.forced ? " (forzada, sin comprobación de entrada)" : ""} · ${usage ? line(usage) : "-"} · ${(G.ms / 1000).toFixed(1)} s`);
     if (G.stages.length) out.push("TRAZA: " + G.stages.map((x) => x.label + (x.note ? ` [${x.note}]` : "")).join(" > "));
     // Lo que el filtro ve en el material interno de cada etapa (nunca sale del servidor).

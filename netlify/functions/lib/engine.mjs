@@ -210,9 +210,11 @@ export async function runStage({ pipeline, st, key, model, messages, deadline, g
   const ctx = contextOf(st, messages);
   const input = render(stage.input, ctx, { guard });
   const base = stageSystem(stage, ctx);
-  const system = stage.conversation && input.trim()
-    ? [{ type: "text", text: base }, { type: "text", text: input }]
-    : [{ type: "text", text: base }];
+  // En la generación con conversación, el bloque de instrucciones es el mismo en cada
+  // mensaje: se marca para que el proveedor lo guarde en caché y lo reutilice. No cambia
+  // lo que recibe el modelo; cambia lo que se factura desde el segundo mensaje.
+  const baseBlock = stage.conversation ? { type: "text", text: base, cache_control: { type: "ephemeral" } } : { type: "text", text: base };
+  const system = stage.conversation && input.trim() ? [baseBlock, { type: "text", text: input }] : [baseBlock];
   const msgs = stage.conversation ? messages : [{ role: "user", content: input }];
   const call = () =>
     callModel({
@@ -230,6 +232,8 @@ export async function runStage({ pipeline, st, key, model, messages, deadline, g
     st.usage.input += r.usage.input;
     st.usage.output += r.usage.output;
     st.usage.calls += 1;
+    if (r.usage.cached) st.usage.cached = (st.usage.cached || 0) + r.usage.cached;
+    if (r.usage.cacheWrite) st.usage.cacheWrite = (st.usage.cacheWrite || 0) + r.usage.cacheWrite;
   };
   account(res);
 

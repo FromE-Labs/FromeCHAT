@@ -313,7 +313,7 @@
     if (acc.signal && !acc.held) { const sg = document.createElement("span"); sg.className = "signal"; sg.textContent = "⟶ Signal: " + acc.signal; ui.body.appendChild(sg); }
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     const u = acc.usage;
-    meta.textContent = (u ? u.calls + (u.calls === 1 ? " llamada · " : " llamadas · ") + u.input + " in · " + u.output + " out · " : "") + secs + " s";
+    meta.textContent = (u ? u.calls + (u.calls === 1 ? " llamada · " : " llamadas · ") + u.input + " in" + (u.cached ? " (" + u.cached + " de caché)" : "") + " · " + u.output + " out · " : "") + secs + " s";
     ui.thread.scrollTop = ui.thread.scrollHeight;
     return text;
   }

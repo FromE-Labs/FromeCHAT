@@ -128,3 +128,28 @@ test("etapa de texto sin salida: usa su texto fijo si lo define, y si no devuelv
     assert.equal(out.error.retryable, true);
   } finally { globalThis.fetch = real; }
 });
+
+test("caché: la generación con conversación marca el bloque de instrucciones y cuenta lo leído y lo escrito", async () => {
+  const real = globalThis.fetch;
+  const bodies = [];
+  const sse = (u) => `data: {"type":"message_start","message":{"usage":${JSON.stringify(u)}}}\n\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hola"}}\n\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}\n\n`;
+  const replies = [{ input_tokens: 20, cache_creation_input_tokens: 900 }, { input_tokens: 25, cache_read_input_tokens: 900 }, { input_tokens: 30 }];
+  globalThis.fetch = async (_url, init) => { bodies.push(JSON.parse(init.body)); return new Response(sse(replies[bodies.length - 1]), { status: 200, headers: { "content-type": "text/event-stream" } }); };
+  try {
+    const messages = [{ role: "user", content: "hola" }];
+    const conv = { start: "a", stages: { a: { type: "text", system: "INSTRUCCIONES", conversation: true, input: "", save: "draft", next: [{ deliver: "draft" }] } } };
+    let st = newState(conv, { bind: "k", ttl: 1000 });
+    await runStage({ pipeline: conv, st, key: "k", model: "m", messages, deadline: Date.now() + 5000 });
+    assert.deepEqual(bodies[0].system, [{ type: "text", text: "INSTRUCCIONES", cache_control: { type: "ephemeral" } }]);
+    assert.deepEqual(st.usage, { input: 920, output: 3, calls: 1, cacheWrite: 900 });
+    st = newState(conv, { bind: "k", ttl: 1000 });
+    await runStage({ pipeline: conv, st, key: "k", model: "m", messages, deadline: Date.now() + 5000 });
+    assert.deepEqual(st.usage, { input: 925, output: 3, calls: 1, cached: 900 });
+    // Una etapa sin conversación no se marca.
+    const plain = { start: "a", stages: { a: { type: "text", system: "S", input: "x", save: "draft", next: [{ deliver: "draft" }] } } };
+    st = newState(plain, { bind: "k", ttl: 1000 });
+    await runStage({ pipeline: plain, st, key: "k", model: "m", messages, deadline: Date.now() + 5000 });
+    assert.deepEqual(bodies[2].system, [{ type: "text", text: "S" }]);
+    assert.deepEqual(st.usage, { input: 30, output: 3, calls: 1 });
+  } finally { globalThis.fetch = real; }
+});

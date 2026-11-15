@@ -94,6 +94,9 @@ export async function readStream(upstream, { onText, onUsage, deadline }) {
         if (ev.type === "message_start" && ev.message?.usage) {
           const u = ev.message.usage;
           usage.input = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+          // De esa entrada, cuánto se ha leído de la caché del proveedor y cuánto se ha escrito en ella.
+          if (u.cache_read_input_tokens) usage.cached = u.cache_read_input_tokens;
+          if (u.cache_creation_input_tokens) usage.cacheWrite = u.cache_creation_input_tokens;
           onUsage?.(usage);
         } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
           if (onText(ev.delta.text) === false) {
