@@ -4,7 +4,7 @@
 // ruta pública, en la que el modelo no recibe el prompt operativo.
 
 import { heuristicProbe } from "./shield.mjs";
-import { postMessages, effortFor } from "./anthropic.mjs";
+import { askOnce } from "./provider.mjs";
 
 const GATE_MODEL = process.env.GATE_MODEL || "claude-haiku-5-5";
 const GATE_TIMEOUT_MS = 12000;
@@ -38,42 +38,26 @@ export async function gate({ key, messages }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), GATE_TIMEOUT_MS);
   try {
-    const r = await postMessages({
+    const r = await askOnce({
       key,
+      model: GATE_MODEL,
+      system: GATE_SYSTEM,
+      content: `<context>\n${prior}\n</context>\n<last_message>\n${last}\n</last_message>`,
+      maxTokens: GATE_MAX_TOKENS,
       signal: ctrl.signal,
-      body: {
-        model: GATE_MODEL,
-        max_tokens: GATE_MAX_TOKENS,
-        system: GATE_SYSTEM,
-        messages: [{ role: "user", content: `<context>\n${prior}\n</context>\n<last_message>\n${last}\n</last_message>` }],
-        ...effortFor(GATE_MODEL),
-      },
     });
-    if (r.status === 401 || r.status === 403) {
-      let message = "";
-      try {
-        message = (await r.json())?.error?.message || "";
-      } catch {}
-      return { auth: false, status: r.status, message };
-    }
+    if (!r.ok && r.auth) return { auth: false, status: r.status, message: r.status ? r.message : "" };
     if (!r.ok) {
       // El clasificador no decide: se continúa con las demás capas (prompt mínimo y filtro de salida).
-      console.warn(`gate: proveedor ${r.status}; se continúa sin clasificación`);
-      return { probe: false, via: "error", status: r.status };
+      console.warn(`gate: proveedor ${r.status || "sin respuesta"}; se continúa sin clasificación`);
+      return { probe: false, via: "error", ...(r.status ? { status: r.status } : {}) };
     }
-    const data = await r.json();
-    // La respuesta puede traer un bloque de pensamiento antes del texto.
-    const text = (data?.content || []).filter((c) => c?.type === "text").map((c) => c.text).join(" ");
-    const word = text.trim().toUpperCase();
+    const word = r.text.trim().toUpperCase();
     if (!word) {
       console.warn("gate: sin veredicto legible; se continúa sin clasificación");
       return { probe: false, via: "error" };
     }
-    const usage = { input: data?.usage?.input_tokens || 0, output: data?.usage?.output_tokens || 0 };
-    return { probe: /\bPROBE\b/.test(word) && !/^SAFE\b/.test(word), via: "model", usage };
-  } catch (e) {
-    console.warn(`gate: ${e?.name || "error"}; se continúa sin clasificación`);
-    return { probe: false, via: "error" };
+    return { probe: /\bPROBE\b/.test(word) && !/^SAFE\b/.test(word), via: "model", usage: r.usage };
   } finally {
     clearTimeout(timer);
   }

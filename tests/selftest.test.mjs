@@ -1,3 +1,4 @@
+import "./helpers/proveedor-fiel.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";

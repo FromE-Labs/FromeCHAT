@@ -15,7 +15,7 @@ import { pickModules, newState } from "./lib/engine.mjs";
 import { stepCycle } from "./lib/cycle.mjs";
 import { seal, unseal } from "./lib/seal.mjs";
 import { inspect } from "./lib/shield.mjs";
-import { callModel } from "./lib/anthropic.mjs";
+import { callModel } from "./lib/provider.mjs";
 import { gate } from "./lib/gate.mjs";
 import { MODELS } from "./chat.mjs";
 

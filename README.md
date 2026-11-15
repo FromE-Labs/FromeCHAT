@@ -4,7 +4,8 @@ Banco de pruebas abierto de la arquitectura de gobernanza From E™ sobre modelo
 
 - Sin cuenta y sin suscripción: cada usuario paga sus tokens al proveedor con su propia clave de API.
 - Comparador en el centro: el mismo mensaje y el mismo modelo, con y sin From E™, lado a lado.
-- Con From E™ activa, cada respuesta son dos llamadas: una comprobación de entrada breve y una generación gobernada. El módulo opcional «Ciclo por etapas» la hace recorrer en servidor varias llamadas separadas, y la interfaz muestra la traza de etapas.
+- Con From E™ activa, cada respuesta son dos llamadas: una comprobación de entrada breve y una generación gobernada.
+- Las llamadas al proveedor van sobre el [AI SDK](https://github.com/vercel/ai) (Apache 2.0): flujo de respuesta, recuento de tokens y caché de instrucciones. Lo propio queda en `lib/provider.mjs`: la clave del usuario, el corte por tiempo y la traducción de errores. El módulo opcional «Ciclo por etapas» la hace recorrer en servidor varias llamadas separadas, y la interfaz muestra la traza de etapas.
 - Módulos: el usuario enciende o apaga cada módulo de trabajo. El servidor compone el texto de cada etapa solo con los activos; sus nombres son públicos, sus textos no.
 - La arquitectura se ejecuta en servidor y nunca llega al navegador (ver «Protección de la arquitectura»).
 - La clave del usuario se usa en cada llamada al proveedor y se descarta: no se almacena ni se registra.

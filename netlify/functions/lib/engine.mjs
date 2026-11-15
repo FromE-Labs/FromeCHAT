@@ -6,7 +6,7 @@
 // Cada invocación de la función ejecuta UNA etapa (una llamada al modelo) y devuelve
 // el estado sellado para la siguiente. Ninguna llamada contiene el ciclo completo.
 
-import { callModel } from "./anthropic.mjs";
+import { callModel } from "./provider.mjs";
 
 const SAFE_KEY = /^[A-Za-z0-9_]+$/;
 

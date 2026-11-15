@@ -18,7 +18,7 @@ import { loadGovernance, PUBLIC_SYSTEM, PUBLIC_EMPTY, UNGOVERNED_SYSTEM } from "
 import { LeakFilter } from "./lib/shield.mjs";
 import { gate } from "./lib/gate.mjs";
 import { recordTurn } from "./lib/consent.mjs";
-import { openStream, readStream, upstreamError } from "./lib/anthropic.mjs";
+import { openStream, readStream, upstreamError } from "./lib/provider.mjs";
 import { runStage, newState, contextOf, getPath, render, pickModules } from "./lib/engine.mjs";
 import { seal, unseal, bindingOf, STATE_TTL_MS } from "./lib/seal.mjs";
 
@@ -121,7 +121,7 @@ async function single({ route, key, model, messages, consent, sessionId, deadlin
     messages,
     maxTokens: MAX_OUTPUT,
   });
-  if (!upstream.ok || !upstream.body) {
+  if (!upstream.ok) {
     const e = await upstreamError(upstream);
     // Nunca se incluye la clave en el mensaje de error.
     return json(e.status === 401 ? 401 : 502, { error: "upstream", status: e.status, message: e.message });
