@@ -19,7 +19,7 @@ public/               web estática (portada, /chat/, /privacidad/)
 netlify/functions/    chat.mjs (una etapa del ciclo por invocación), models.mjs
   lib/engine.mjs      motor genérico de ciclos: plantillas, reglas de paso, ejecución de una etapa
   lib/seal.mjs        estado sellado entre etapas (AES-256-GCM)
-  lib/anthropic.mjs   llamadas al proveedor con la clave del usuario
+  lib/provider.mjs    llamadas al proveedor con la clave del usuario, sobre el AI SDK
   lib/governance.mjs  carga el prompt operativo y el ciclo, y prepara el material del filtro
   lib/gate.mjs        clasificador de entrada
   lib/shield.mjs      filtro de salida y detección heurística
