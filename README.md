@@ -113,6 +113,10 @@ Netlify, enlazado a este repositorio. Publica `public/`, funciones en `netlify/f
 
 Variable de entorno obligatoria en Netlify: `GOVERNANCE_TOKEN`, un token de GitHub de solo lectura sobre el repositorio privado que contiene el prompt operativo y la definición del ciclo. El build los descarga a `governance/`, genera las marcas canario y la clave de sellado del despliegue y lo empaqueta todo con la función; nada de eso se versiona aquí.
 
+## Coste por mensaje
+
+Las reglas de la arquitectura viajan como instrucciones del sistema y se guardan en la caché del proveedor. El primer mensaje de cada persona, y cada mensaje tras cinco minutos de pausa, paga la escritura de esa caché; los siguientes pagan solo la lectura. Por eso el tamaño de las instrucciones es un coste directo del producto y se mide en cada cambio.
+
 ## Licencias
 
 - Especificaciones Open Core de From E™: publicadas como trabajo científico (DOI 10.5281/zenodo.19041459); su texto operativo no se distribuye en este repositorio.
