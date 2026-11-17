@@ -114,6 +114,19 @@ Netlify, enlazado a este repositorio. Publica `public/`, funciones en `netlify/f
 
 Variable de entorno obligatoria en Netlify: `GOVERNANCE_TOKEN`, un token de GitHub de solo lectura sobre el repositorio privado que contiene el prompt operativo y la definición del ciclo. El build los descarga a `governance/`, genera las marcas canario y la clave de sellado del despliegue y lo empaqueta todo con la función; nada de eso se versiona aquí.
 
+## Preguntas de cortesía
+
+Opcional. Permite que quien reciba un código de invitación pruebe el chat sin clave propia: el servidor usa entonces una clave de la autora, con el modelo fijado en Claude Opus 5.5 y un número de preguntas por código. Con el comparador activo, una pregunta son dos respuestas y cuenta como una. El ciclo por etapas no está disponible con código.
+
+Variables de entorno en Netlify:
+
+- `COURTESY_KEY`: clave de API creada en un espacio de trabajo aparte, con límite de gasto mensual puesto en la consola del proveedor. Ese límite es el tope real.
+- `COURTESY_CODES`: los códigos válidos, separados por comas o espacios, con la forma `FE-XXXX-XXXX-XXXX`.
+- `COURTESY_PER_CODE`: preguntas por código. Por defecto, 3.
+- `COURTESY_TOTAL`: tope global de preguntas. Por defecto, códigos × preguntas por código.
+
+Sin `COURTESY_KEY` o sin códigos, el campo no aparece y la función no existe. La clave de cortesía nunca llega al navegador ni a ningún registro; los errores del proveedor se sustituyen por un mensaje genérico. Si el proveedor falla sin entregar nada, la pregunta no se descuenta.
+
 ## Coste por mensaje
 
 Las reglas de la arquitectura viajan como instrucciones del sistema y se guardan en la caché del proveedor. El primer mensaje de cada persona, y cada mensaje tras cinco minutos de pausa, paga la escritura de esa caché; los siguientes pagan solo la lectura. Por eso el tamaño de las instrucciones es un coste directo del producto y se mide en cada cambio.

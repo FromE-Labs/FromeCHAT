@@ -1,6 +1,7 @@
 // FromE Chat — función principal.
 // Recibe { key, model, governed, messages, consent, sessionId, state? } y llama a
-// Anthropic con la clave del usuario. La clave se usa en esta petición y se descarta:
+// Anthropic con la clave del usuario. Con un código de invitación ({ code, turn } en
+// lugar de key) usa la clave de cortesía del servidor, con el modelo fijado. La clave se usa en esta petición y se descarta:
 // no se escribe en registros, no se guarda en ningún almacén, no se devuelve al cliente.
 //
 // Sin arquitectura: una llamada directa al modelo, retransmitida tal cual.
@@ -21,6 +22,7 @@ import { recordTurn } from "./lib/consent.mjs";
 import { openStream, readStream, upstreamError } from "./lib/anthropic.mjs";
 import { runStage, newState, contextOf, getPath, render, pickModules } from "./lib/engine.mjs";
 import { seal, unseal, bindingOf, STATE_TTL_MS } from "./lib/seal.mjs";
+import { courtesyConfig, takeCourtesy, refundCourtesy, COURTESY_MODEL, COURTESY_MAX_CHARS, COURTESY_MAX_TOTAL_CHARS } from "./lib/courtesy.mjs";
 
 // Modelos de frontera ofrecidos. Se valida contra esta lista para que el servidor
 // nunca reenvíe un identificador arbitrario.
@@ -38,6 +40,9 @@ const MAX_MESSAGES = 60;
 const MAX_CHARS_PER_MESSAGE = 24000;
 const PUBLIC_SIGNAL = "Límite de divulgación — respuesta con información pública";
 const TRUNCATED_NOTE = "\n\n[Respuesta cortada antes de terminar: límite de tiempo o de espacio de salida.]";
+const COURTESY_DOWN = "Las preguntas de cortesía no están disponibles ahora mismo. Inténtalo más tarde o usa tu propia clave.";
+// Cabecera con las preguntas que le quedan al código: el navegador la muestra.
+const courtesyHeaders = (c) => (c ? { "x-frome-courtesy": String(c.remaining) } : {});
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -65,7 +70,7 @@ function sanitizeMessages(raw) {
 }
 
 // Respuesta SSE con latido: run(send) emite eventos; el flujo se cierra al terminar.
-function sse(route, run) {
+function sse(route, run, extra = {}) {
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -93,6 +98,7 @@ function sse(route, run) {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-store",
       "x-frome-governed": route === "baseline" ? "0" : "1",
+      ...extra,
     },
   });
 }
@@ -113,7 +119,7 @@ function clean(g, text) {
 }
 
 // Una llamada directa retransmitida: sin arquitectura (baseline) o ruta pública.
-async function single({ route, key, model, messages, consent, sessionId, deadline, extraUsage }) {
+async function single({ route, key, model, messages, consent, sessionId, deadline, extraUsage, courtesy }) {
   const upstream = await openStream({
     key,
     model,
@@ -123,6 +129,10 @@ async function single({ route, key, model, messages, consent, sessionId, deadlin
   });
   if (!upstream.ok || !upstream.body) {
     const e = await upstreamError(upstream);
+    if (courtesy) {
+      await courtesy.refund();
+      return json(503, { error: "courtesy_upstream", message: COURTESY_DOWN });
+    }
     // Nunca se incluye la clave en el mensaje de error.
     return json(e.status === 401 ? 401 : 502, { error: "upstream", status: e.status, message: e.message });
   }
@@ -136,6 +146,7 @@ async function single({ route, key, model, messages, consent, sessionId, deadlin
       },
     });
     if (r.failed && !delivered) {
+      if (courtesy) await courtesy.refund();
       send({ type: "error", error: { message: r.failed, retryable: true } });
       return;
     }
@@ -164,11 +175,11 @@ async function single({ route, key, model, messages, consent, sessionId, deadlin
       // Sin clave, sin IP, sin cabeceras.
       await recordTurn({ sessionId, model, route, messages, assistantText: delivered, usage }).catch(() => {});
     }
-  });
+  }, courtesyHeaders(courtesy));
 }
 
 // Una etapa del ciclo gobernado.
-function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline }) {
+function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline, courtesy }) {
   const { pipeline, guard, sealKey } = g;
   return sse("governed", async (send) => {
     const id = st.next;
@@ -179,7 +190,8 @@ function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline }
     send({ type: "frome_stage", id, label: stage.label, detail: stage.detail || "", status: "running" });
     const out = await runStage({ pipeline, st, key, model, messages, deadline, guard });
     if (out.error) {
-      send({ type: "error", error: { message: out.error.message, retryable: Boolean(out.error.retryable) } });
+      if (courtesy) await courtesy.refund();
+      send({ type: "error", error: { message: courtesy ? COURTESY_DOWN : out.error.message, retryable: Boolean(out.error.retryable) } });
       return;
     }
     const ctx = contextOf(st, messages);
@@ -231,7 +243,7 @@ function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline }
         cycle: { path: st.path, signal, withheld: notice, modules: Object.keys(st.modules || {}) },
       }).catch(() => {});
     }
-  });
+  }, courtesyHeaders(courtesy));
 }
 
 export default async (req) => {
@@ -246,21 +258,42 @@ export default async (req) => {
     return json(400, { error: "json" });
   }
 
-  const key = (body.key || "").trim();
-  if (!validKey(key)) return json(400, { error: "key", message: "Clave de API de Anthropic no válida (empieza por sk-ant-)." });
+  // Con código de invitación no hace falta clave: se usa la de cortesía del servidor.
+  const useCode = typeof body.code === "string" && body.code.trim() !== "" && !validKey((body.key || "").trim());
+  let key = (body.key || "").trim();
+  if (!useCode && !validKey(key)) return json(400, { error: "key", message: "Clave de API de Anthropic no válida (empieza por sk-ant-)." });
 
-  const model = MODELS[body.model] ? body.model : "claude-opus-5-5";
+  let model = MODELS[body.model] ? body.model : "claude-opus-5-5";
   const messages = sanitizeMessages(body.messages);
   if (!messages) return json(400, { error: "messages" });
   const consent = body.consent === true;
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.slice(0, 64) : null;
-  const common = { key, model, messages, consent, sessionId, deadline };
+
+  let courtesy = null;
+  if (useCode) {
+    const cfg = courtesyConfig();
+    if (!cfg.enabled) return json(403, { error: "courtesy_off", message: "Las preguntas de cortesía no están activas. Usa tu propia clave de Anthropic." });
+    if (body.state !== undefined && body.state !== null) {
+      return json(400, { error: "courtesy_state", message: "El ciclo por etapas no está disponible con un código de invitación." });
+    }
+    const total = messages.reduce((n, m) => n + m.content.length, 0);
+    if (messages.some((m) => m.content.length > COURTESY_MAX_CHARS) || total > COURTESY_MAX_TOTAL_CHARS) {
+      return json(413, { error: "courtesy_size", message: `Con un código de invitación cada mensaje admite hasta ${COURTESY_MAX_CHARS} caracteres. Para textos más largos, usa tu propia clave.` });
+    }
+    const t = await takeCourtesy(cfg, { code: body.code, turn: body.turn, slot: body.governed === false ? "b" : "g" });
+    if (!t.ok) return json(t.status, { error: "courtesy_" + t.reason, message: t.message });
+    key = cfg.key;
+    model = COURTESY_MODEL;
+    courtesy = { remaining: t.remaining, refund: () => refundCourtesy(cfg, t) };
+  }
+  const common = { key, model, messages, consent, sessionId, deadline, courtesy };
 
   if (body.governed === false) return single({ route: "baseline", ...common });
 
   const g = loadGovernance();
   // Módulos activos para esta respuesta. Quedan fijados en el estado sellado.
-  const modules = g.pipeline ? pickModules(g.pipeline, body.modules) : [];
+  // Con código de invitación no hay ciclo por etapas: son varias llamadas por mensaje.
+  const modules = (g.pipeline ? pickModules(g.pipeline, body.modules) : []).filter((m) => !(courtesy && m === "etapas"));
   const bind = bindingOf(model, messages, modules);
 
   // Continuación de un ciclo en curso: el estado sellado dice qué etapa toca.
@@ -275,6 +308,10 @@ export default async (req) => {
   // Primer paso: clasificador de entrada y, si procede, primera etapa.
   const verdict = await gate({ key, messages });
   if (verdict.auth === false) {
+    if (courtesy) {
+      await courtesy.refund();
+      return json(503, { error: "courtesy_upstream", message: COURTESY_DOWN });
+    }
     return json(401, { error: "upstream", status: verdict.status, message: verdict.message || "Clave rechazada por el proveedor." });
   }
   if (verdict.probe) return single({ route: "public", ...common, extraUsage: verdict.usage || { input: 0, output: 0 } });

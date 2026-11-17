@@ -1,5 +1,6 @@
 import { MODELS } from "./chat.mjs";
 import { loadGovernance } from "./lib/governance.mjs";
+import { courtesyConfig } from "./lib/courtesy.mjs";
 
 // Datos públicos para la interfaz: modelos y nombre de cada módulo. Nunca sus textos.
 export default async () => {
@@ -15,6 +16,8 @@ export default async () => {
       models: Object.entries(MODELS).map(([id, m]) => ({ id, label: m.label })),
       modules,
       presets,
+      // Preguntas de cortesía con código de invitación: solo si el despliegue las tiene activas.
+      courtesy: courtesyConfig().enabled,
       openCoreModules: 7,
       maxOutputTokens: 3000,
       effort: process.env.MODEL_EFFORT || "low",
