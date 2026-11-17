@@ -78,6 +78,11 @@
     for (const lab of el.mods.querySelectorAll("label.toggle")) {
       const inp = lab.querySelector("input"); inp.checked = mods.on.has(inp.dataset.mod); lab.classList.toggle("on", inp.checked);
     }
+    // El nivel cuyo conjunto de módulos coincide con lo marcado queda resaltado.
+    for (const bt of el.presets.querySelectorAll("button")) {
+      const want = (bt.dataset.mods || "").split(",").filter(Boolean);
+      bt.classList.toggle("on", want.length === mods.on.size && want.every((id) => mods.on.has(id)));
+    }
   }
   function buildModules(d) {
     mods.defs = d.modules || [];
@@ -94,7 +99,9 @@
     }
     el.presets.innerHTML = "";
     for (const pr of d.presets || []) {
-      const bt = document.createElement("button"); bt.type = "button"; bt.textContent = pr.label;
+      const bt = document.createElement("button"); bt.type = "button"; bt.dataset.mods = (pr.modules || []).join(",");
+      const nm = document.createElement("b"); nm.textContent = pr.label; bt.appendChild(nm);
+      if (pr.desc) { const ds = document.createElement("small"); ds.textContent = pr.desc; bt.appendChild(ds); }
       bt.addEventListener("click", () => { mods.on = new Set(pr.modules); saveModules(); paintModules(); syncToggles(); });
       el.presets.appendChild(bt);
     }

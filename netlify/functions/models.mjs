@@ -8,7 +8,7 @@ export default async () => {
   try {
     const p = loadGovernance().pipeline;
     modules = Object.entries(p?.modules || {}).filter(([, m]) => !m.hidden).map(([id, m]) => ({ id, label: m.label, desc: m.desc || "", default: m.default !== false }));
-    presets = (p?.presets || []).map((x) => ({ id: x.id, label: x.label, modules: x.modules }));
+    presets = (p?.presets || []).map((x) => ({ id: x.id, label: x.label, desc: x.desc || "", modules: x.modules }));
   } catch {}
   return new Response(
     JSON.stringify({
