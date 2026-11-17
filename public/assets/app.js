@@ -12,6 +12,7 @@
     panes: $("panes"), paneB: $("pane-b"), threadA: $("thread-a"), threadB: $("thread-b"),
     headA: $("head-a"), metaA: $("meta-a"), metaB: $("meta-b"), empty: $("empty"),
     form: $("composer"), input: $("input"), send: $("btn-send"), hintR: $("hint-right"), newBtn: $("btn-new"), sid: $("sid"), modsBox: $("mods-box"), mods: $("modules"), presets: $("presets"),
+    code: $("code"), codeState: $("code-state"), czBox: $("courtesy-box"),
   };
 
   /* ---------- estado ---------- */
@@ -20,6 +21,9 @@
     historyB: [],         // hilo sin arquitectura (comparador)
     busy: false,
     sessionId: cryptoId(),
+    turn: null,           // identificador de la pregunta en curso (cortesía)
+    viaCode: false,       // la pregunta en curso va con código de invitación
+    courtesy: { enabled: false, ok: false, remaining: null },
   };
 
   function cryptoId() {
@@ -67,7 +71,36 @@
     if (!v) { el.keyState.textContent = "Sin clave. Pégala para empezar."; el.keyState.style.color = ""; }
     else if (keyOk()) { el.keyState.textContent = "Clave con formato válido. Se comprobará en el primer mensaje."; el.keyState.style.color = "var(--ok)"; }
     else { el.keyState.textContent = "Formato no reconocido: una clave de API de Anthropic empieza por sk-ant-."; el.keyState.style.color = "var(--warn)"; }
-    el.send.disabled = !keyOk() || state.busy;
+    if (!v && useCourtesy()) { el.keyState.textContent = "Sin clave: se usará tu código de invitación."; el.keyState.style.color = "var(--ok)"; }
+    el.model.disabled = useCourtesy();
+    if (useCourtesy()) el.model.value = "claude-opus-5-5";
+    el.send.disabled = !canSend() || state.busy;
+  }
+
+  /* ---------- código de invitación: preguntas de cortesía ---------- */
+  function codeVal() { return el.code.value.trim().toUpperCase().replace(/\s+/g, ""); }
+  function codeFormatOk() { return /^[A-Z0-9]{2,4}(-[A-Z0-9]{4}){2,4}$/.test(codeVal()); }
+  function useCourtesy() { const c = state.courtesy; return !keyOk() && c.enabled && c.ok && c.remaining > 0; }
+  function canSend() { return keyOk() || useCourtesy(); }
+  function paintCourtesy(msg, warn) {
+    const c = state.courtesy; let t = msg || "", w = Boolean(warn);
+    if (!msg && c.ok) {
+      if (c.remaining > 0) t = "Código válido. Te " + (c.remaining === 1 ? "queda 1 pregunta" : "quedan " + c.remaining + " preguntas") + " de cortesía, con Claude Opus 5.5.";
+      else { t = "Este código ya no tiene preguntas. Para seguir, pega tu propia clave de Anthropic."; w = true; }
+    }
+    el.codeState.textContent = t; el.codeState.style.color = !t ? "" : w ? "var(--warn)" : "var(--ok)";
+  }
+  let codeTimer = 0;
+  async function checkCode() {
+    const c = state.courtesy; c.ok = false; c.remaining = null;
+    if (!c.enabled || !codeVal()) { paintCourtesy(""); refreshKeyState(); return; }
+    if (!codeFormatOk()) { paintCourtesy("Formato no reconocido. Un código tiene esta forma: FE-XXXX-XXXX-XXXX.", true); refreshKeyState(); return; }
+    try {
+      const r = await fetch("/api/courtesy", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: codeVal() }) });
+      if (r.ok) { const d = await r.json(); c.ok = true; c.remaining = Number(d.remaining) || 0; try { localStorage.setItem("fromechat.code", codeVal()); } catch {} paintCourtesy(); }
+      else paintCourtesy(r.status === 429 ? "Demasiados intentos seguidos. Espera un minuto." : "Código no reconocido.", true);
+    } catch { paintCourtesy("No se ha podido comprobar el código.", true); }
+    refreshKeyState();
   }
 
   /* ---------- modelos y módulos ---------- */
@@ -114,6 +147,8 @@
       for (const m of d.models) { const o = document.createElement("option"); o.value = m.id; o.textContent = m.label; el.model.appendChild(o); }
       try { const saved = localStorage.getItem("fromechat.model"); if (saved && d.models.some((m) => m.id === saved)) el.model.value = saved; } catch {}
       buildModules(d);
+      state.courtesy.enabled = d.courtesy === true; el.czBox.hidden = !state.courtesy.enabled;
+      if (state.courtesy.enabled) { try { const sc = localStorage.getItem("fromechat.code"); if (sc) el.code.value = sc; } catch {} }
     } catch {
       el.model.innerHTML = '<option value="claude-opus-5-5">Claude Opus 5.5</option>';
     }
@@ -239,15 +274,18 @@
     try {
       res = await fetch("/api/chat", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ key: el.key.value.trim(), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId, state: token || undefined, modules: governed && mods.defs.length ? modules : undefined }),
+        body: JSON.stringify({ ...(state.viaCode ? { code: codeVal(), turn: state.turn } : { key: el.key.value.trim() }), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId, state: token || undefined, modules: governed && mods.defs.length ? modules : undefined }),
       });
     } catch { return { error: "No hay conexión con el servidor.", retry: true }; }
     if (!res.ok) {
       let msg = "Error " + res.status;
       try { const e = await res.json(); if (e.message) msg = e.message; } catch {}
       if (res.status === 429) msg = "Demasiadas peticiones seguidas. Espera un minuto.";
+      if (res.status === 402 && state.viaCode) { state.courtesy.remaining = 0; paintCourtesy(); }
       return { error: msg, retry: res.status === 429 || res.status >= 500, wait: res.status === 429 ? 8000 : 0 };
     }
+    const left = res.headers.get("x-frome-courtesy");
+    if (left !== null && state.viaCode) { state.courtesy.remaining = Number(left) || 0; paintCourtesy(); }
     const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
     let cont = null, done = false, err = null;
     try {
@@ -326,9 +364,10 @@
   }
 
   async function send(text) {
-    if (!keyOk() || state.busy || !text.trim()) return;
+    if (!canSend() || state.busy || !text.trim()) return;
+    state.viaCode = useCourtesy(); state.turn = cryptoId();
     state.busy = true; el.send.disabled = true; el.input.disabled = true;
-    if (el.remember.checked) saveKey(el.key.value.trim());
+    if (el.remember.checked && keyOk()) saveKey(el.key.value.trim());
     try { localStorage.setItem("fromechat.model", el.model.value); } catch {}
     el.empty && el.empty.remove(); el.empty = null;
     const cmp = el.compare.checked, gov = el.governed.checked;
@@ -358,6 +397,7 @@
 
   /* ---------- eventos ---------- */
   el.key.addEventListener("input", refreshKeyState);
+  el.code.addEventListener("input", () => { clearTimeout(codeTimer); codeTimer = setTimeout(checkCode, 500); });
   el.eye.addEventListener("click", () => { el.key.type = el.key.type === "password" ? "text" : "password"; });
   el.remember.addEventListener("change", () => { if (el.remember.checked) { if (keyOk()) saveKey(el.key.value.trim()); } else forgetKey(); syncToggles(); });
   [el.governed, el.compare, el.consent].forEach((c) => c.addEventListener("change", syncToggles));
@@ -375,5 +415,6 @@
     const k = await loadKey();
     if (k) { el.key.value = k; el.remember.checked = true; }
     syncToggles(); refreshKeyState(); autosize();
+    if (state.courtesy.enabled && codeVal()) checkCode();
   })();
 })();
