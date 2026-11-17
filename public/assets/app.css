@@ -176,9 +176,11 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 
 /* Módulos */
 .beta{display:inline-block;margin-left:6px;padding:1px 6px;border:1px solid var(--accent);color:var(--accent);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;vertical-align:1px}
-.presets{display:flex;gap:8px;margin:0 0 4px}
-.presets button{flex:1;background:transparent;border:1px solid var(--line-strong);color:var(--soft);font:inherit;font-size:12px;font-weight:650;padding:7px 8px;cursor:pointer}
-.presets button:hover{border-color:var(--accent);color:#fff}
+.presets{display:grid;gap:6px;margin:0 0 4px}
+.presets button{display:flex;flex-direction:column;gap:2px;text-align:left;background:transparent;border:1px solid var(--line-strong);color:var(--soft);font:inherit;font-size:12px;padding:8px 10px;cursor:pointer}
+.presets button b{font-weight:650}
+.presets button small{font-size:11px;font-weight:400;opacity:.75;line-height:1.35}
+.presets button:hover,.presets button.on{border-color:var(--accent);color:#fff}
 .presets button:disabled{opacity:.4;cursor:default}
 #mods-box.off .toggle{opacity:.45}
 .trace li.mods span{color:#8a97a4}
