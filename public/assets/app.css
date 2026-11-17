@@ -214,3 +214,19 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 .rv-verdict .btn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:#fff}
 .rv-save{display:flex;align-items:center;gap:14px}
 @media(max-width:900px){.rv-cols.two{grid-template-columns:1fr}.rv-gate-form{flex-direction:column}}
+
+/* ---------- idiomas ---------- */
+.i18n-wait body{visibility:hidden}
+.nav-right{display:flex;align-items:center;gap:10px}
+.langs{display:inline-flex;border:1px solid var(--line-strong);flex:none}
+.langs button{background:transparent;border:0;color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.08em;padding:0 8px;min-height:30px;cursor:pointer}
+.langs button+button{border-left:1px solid var(--line-strong)}
+.langs button:hover{color:#fff}
+.langs button.on{color:var(--accent);background:var(--accent-soft)}
+@media(max-width:520px){.langs button{padding:0 6px;letter-spacing:.04em}.nav-right{gap:6px}.nav-inner{width:calc(100% - 28px)!important}.nav-inner .btn{padding:0 9px;font-size:11px;white-space:nowrap}.brand{font-size:16px}.nav-cta-home{display:none}}
+.navlinks{gap:17px;font-size:13px}
+.navlinks a{white-space:nowrap}
+@media(min-width:901px){.nav-inner{gap:16px}}
+@media(max-width:1260px){.brand .by{display:none}}
+@media(max-width:1120px){.navlinks a[target]{display:none}}
+@media(max-width:1010px){.navlinks{display:none}}
