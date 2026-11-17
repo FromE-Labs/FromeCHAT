@@ -4,6 +4,9 @@
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
+  // Idiomas: el español es el texto de origen; T(clave, español, variables) lo traduce si hay traducción.
+  const I = window.FromeI18n || { lang: "es", t: (k, es, v) => String(es).replace(/\{(\w+)\}/g, (m, x) => (v && v[x] !== undefined ? v[x] : m)), phrase: (x) => x, fragments: (x) => x, apply: () => {}, onChange: () => {} };
+  const T = I.t;
   const el = {
     key: $("key"), eye: $("btn-eye"), remember: $("remember"), keyState: $("key-state"),
     model: $("model"), governed: $("governed"), compare: $("compare"), consent: $("consent"),
@@ -68,10 +71,10 @@
   function keyOk() { return /^sk-ant-[A-Za-z0-9_\-]{20,}$/.test(el.key.value.trim()); }
   function refreshKeyState() {
     const v = el.key.value.trim();
-    if (!v) { el.keyState.textContent = "Sin clave. Pégala para empezar."; el.keyState.style.color = ""; }
-    else if (keyOk()) { el.keyState.textContent = "Clave con formato válido. Se comprobará en el primer mensaje."; el.keyState.style.color = "var(--ok)"; }
-    else { el.keyState.textContent = "Formato no reconocido: una clave de API de Anthropic empieza por sk-ant-."; el.keyState.style.color = "var(--warn)"; }
-    if (!v && useCourtesy()) { el.keyState.textContent = "Sin clave: se usará tu código de invitación."; el.keyState.style.color = "var(--ok)"; }
+    if (!v) { el.keyState.textContent = T("d.key.none", "Sin clave. Pégala para empezar."); el.keyState.style.color = ""; }
+    else if (keyOk()) { el.keyState.textContent = T("d.key.ok", "Clave con formato válido. Se comprobará en el primer mensaje."); el.keyState.style.color = "var(--ok)"; }
+    else { el.keyState.textContent = T("d.key.bad", "Formato no reconocido: una clave de API de Anthropic empieza por sk-ant-."); el.keyState.style.color = "var(--warn)"; }
+    if (!v && useCourtesy()) { el.keyState.textContent = T("d.key.code", "Sin clave: se usará tu código de invitación."); el.keyState.style.color = "var(--ok)"; }
     el.model.disabled = useCourtesy();
     if (useCourtesy()) el.model.value = "claude-opus-5-5";
     el.send.disabled = !canSend() || state.busy;
@@ -82,24 +85,26 @@
   function codeFormatOk() { return /^[A-Z0-9]{2,4}(-[A-Z0-9]{4}){2,4}$/.test(codeVal()); }
   function useCourtesy() { const c = state.courtesy; return !keyOk() && c.enabled && c.ok && c.remaining > 0; }
   function canSend() { return keyOk() || useCourtesy(); }
-  function paintCourtesy(msg, warn) {
-    const c = state.courtesy; let t = msg || "", w = Boolean(warn);
-    if (!msg && c.ok) {
-      if (c.remaining > 0) t = "Código válido. Te " + (c.remaining === 1 ? "queda 1 pregunta" : "quedan " + c.remaining + " preguntas") + " de cortesía, con Claude Opus 5.5.";
-      else { t = "Este código ya no tiene preguntas. Para seguir, pega tu propia clave de Anthropic."; w = true; }
+  function paintCourtesy(key, es, warn) {
+    const c = state.courtesy; c.note = [key, es, warn];
+    let t = key ? T(key, es) : "", w = Boolean(warn);
+    if (!key && c.ok) {
+      if (c.remaining > 0) t = c.remaining === 1 ? T("d.code.left1", "Código válido. Te queda 1 pregunta de cortesía, con Claude Opus 5.5.") : T("d.code.leftn", "Código válido. Te quedan {n} preguntas de cortesía, con Claude Opus 5.5.", { n: c.remaining });
+      else { t = T("d.code.empty", "Este código ya no tiene preguntas. Para seguir, pega tu propia clave de Anthropic."); w = true; }
     }
     el.codeState.textContent = t; el.codeState.style.color = !t ? "" : w ? "var(--warn)" : "var(--ok)";
   }
   let codeTimer = 0;
   async function checkCode() {
     const c = state.courtesy; c.ok = false; c.remaining = null;
-    if (!c.enabled || !codeVal()) { paintCourtesy(""); refreshKeyState(); return; }
-    if (!codeFormatOk()) { paintCourtesy("Formato no reconocido. Un código tiene esta forma: FE-XXXX-XXXX-XXXX.", true); refreshKeyState(); return; }
+    if (!c.enabled || !codeVal()) { paintCourtesy(); refreshKeyState(); return; }
+    if (!codeFormatOk()) { paintCourtesy("d.code.format", "Formato no reconocido. Un código tiene esta forma: FE-XXXX-XXXX-XXXX.", true); refreshKeyState(); return; }
     try {
       const r = await fetch("/api/courtesy", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: codeVal() }) });
       if (r.ok) { const d = await r.json(); c.ok = true; c.remaining = Number(d.remaining) || 0; try { localStorage.setItem("fromechat.code", codeVal()); } catch {} paintCourtesy(); }
-      else paintCourtesy(r.status === 429 ? "Demasiados intentos seguidos. Espera un minuto." : "Código no reconocido.", true);
-    } catch { paintCourtesy("No se ha podido comprobar el código.", true); }
+      else if (r.status === 429) paintCourtesy("d.code.rate", "Demasiados intentos seguidos. Espera un minuto.", true);
+      else paintCourtesy("d.code.unknown", "Código no reconocido.", true);
+    } catch { paintCourtesy("d.code.fail", "No se ha podido comprobar el código.", true); }
     refreshKeyState();
   }
 
@@ -117,24 +122,29 @@
       bt.classList.toggle("on", want.length === mods.on.size && want.every((id) => mods.on.has(id)));
     }
   }
-  function buildModules(d) {
+  // Nombre y descripción de módulos y niveles: los del servidor en español; traducidos por identificador.
+  function modLabel(labelEs) { const m = mods.defs.find((x) => x.label === labelEs); return m ? T("mod." + m.id, labelEs) : labelEs; }
+  function buildModules(d, keep) {
+    mods.data = d;
     mods.defs = d.modules || [];
     if (!mods.defs.length) return;
-    mods.on = new Set(mods.defs.filter((m) => m.default).map((m) => m.id));
-    try { const saved = JSON.parse(localStorage.getItem("fromechat.modules") || "null"); if (Array.isArray(saved)) mods.on = new Set(saved.filter((id) => mods.defs.some((m) => m.id === id))); } catch {}
+    if (!keep) {
+      mods.on = new Set(mods.defs.filter((m) => m.default).map((m) => m.id));
+      try { const saved = JSON.parse(localStorage.getItem("fromechat.modules") || "null"); if (Array.isArray(saved)) mods.on = new Set(saved.filter((id) => mods.defs.some((m) => m.id === id))); } catch {}
+    }
     el.mods.innerHTML = "";
     for (const m of mods.defs) {
       const lab = document.createElement("label"); lab.className = "toggle"; lab.style.marginTop = "8px";
       const inp = document.createElement("input"); inp.type = "checkbox"; inp.dataset.mod = m.id;
-      const sp = document.createElement("span"); const b = document.createElement("b"); b.textContent = m.label; const sm = document.createElement("small"); sm.textContent = m.desc;
+      const sp = document.createElement("span"); const b = document.createElement("b"); b.textContent = T("mod." + m.id, m.label); const sm = document.createElement("small"); sm.textContent = T("mod." + m.id + ".d", m.desc);
       sp.appendChild(b); sp.appendChild(sm); lab.appendChild(inp); lab.appendChild(sp); el.mods.appendChild(lab);
       inp.addEventListener("change", () => { if (inp.checked) mods.on.add(m.id); else mods.on.delete(m.id); saveModules(); paintModules(); syncToggles(); });
     }
     el.presets.innerHTML = "";
     for (const pr of d.presets || []) {
       const bt = document.createElement("button"); bt.type = "button"; bt.dataset.mods = (pr.modules || []).join(",");
-      const nm = document.createElement("b"); nm.textContent = pr.label; bt.appendChild(nm);
-      if (pr.desc) { const ds = document.createElement("small"); ds.textContent = pr.desc; bt.appendChild(ds); }
+      const nm = document.createElement("b"); nm.textContent = T("lvl." + pr.id, pr.label); bt.appendChild(nm);
+      if (pr.desc) { const ds = document.createElement("small"); ds.textContent = T("lvl." + pr.id + ".d", pr.desc); bt.appendChild(ds); }
       bt.addEventListener("click", () => { mods.on = new Set(pr.modules); saveModules(); paintModules(); syncToggles(); });
       el.presets.appendChild(bt);
     }
@@ -167,21 +177,21 @@
     if (cmp) { el.governed.checked = true; el.governed.disabled = true; el.tGov.classList.add("on"); } else { el.governed.disabled = false; }
     const gov = el.governed.checked;
     el.pillGov.classList.toggle("on", gov);
-    el.pillGov.innerHTML = gov ? '<span class="dot"></span> From E™ activa' : '<span class="dot"></span> Sin arquitectura';
-    el.headA.textContent = gov ? "Con From E™" : "Sin arquitectura";
-    el.hintR.textContent = gov ? (cmp ? "Coste por mensaje: 3 llamadas (comprobación de entrada, generación gobernada y respuesta directa); con el ciclo por etapas, más" : "Coste por mensaje: 2 llamadas (comprobación de entrada y generación gobernada); con el ciclo por etapas, más") : "";
+    el.pillGov.innerHTML = '<span class="dot"></span> ' + esc(gov ? T("d.pill.on", "From E™ activa") : T("d.without", "Sin arquitectura"));
+    el.headA.textContent = gov ? T("d.with", "Con From E™") : T("d.without", "Sin arquitectura");
+    el.hintR.textContent = gov ? (cmp ? T("d.cost3", "Coste por mensaje: 3 llamadas (comprobación de entrada, generación gobernada y respuesta directa); con el ciclo por etapas, más") : T("d.cost2", "Coste por mensaje: 2 llamadas (comprobación de entrada y generación gobernada); con el ciclo por etapas, más")) : "";
     el.modsBox.classList.toggle("off", !gov);
     for (const inp of el.mods.querySelectorAll("input")) inp.disabled = !gov;
     for (const bt of el.presets.querySelectorAll("button")) bt.disabled = !gov;
     el.hintR.className = gov ? "cost" : "";
     el.sid.hidden = !el.consent.checked;
-    el.sid.textContent = "Identificador de esta sesión: " + state.sessionId;
+    el.sid.textContent = T("d.sid", "Identificador de esta sesión: {id}", { id: state.sessionId });
   }
 
   /* ---------- render ---------- */
   function addMsg(thread, role, text, opts = {}) {
     const m = document.createElement("div"); m.className = "msg " + role;
-    const who = document.createElement("div"); who.className = "who"; who.textContent = role === "user" ? "Tú" : (opts.label || "Modelo");
+    const who = document.createElement("div"); who.className = "who"; who.textContent = role === "user" ? T("d.you", "Tú") : (opts.label || T("d.model", "Modelo"));
     m.appendChild(who);
     let trace = null;
     if (opts.trace) { trace = document.createElement("ol"); trace.className = "trace"; m.appendChild(trace); }
@@ -276,11 +286,12 @@
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...(state.viaCode ? { code: codeVal(), turn: state.turn } : { key: el.key.value.trim() }), model: el.model.value, governed, messages, consent: el.consent.checked, sessionId: state.sessionId, state: token || undefined, modules: governed && mods.defs.length ? modules : undefined }),
       });
-    } catch { return { error: "No hay conexión con el servidor.", retry: true }; }
+    } catch { return { error: T("d.err.conn", "No hay conexión con el servidor."), retry: true }; }
     if (!res.ok) {
       let msg = "Error " + res.status;
-      try { const e = await res.json(); if (e.message) msg = e.message; } catch {}
-      if (res.status === 429) msg = "Demasiadas peticiones seguidas. Espera un minuto.";
+      // El servidor responde en español con un código de error: se traduce por código y, si no, por frase.
+      try { const e = await res.json(); if (e.message) msg = T("err." + e.error, I.phrase(e.message), { n: (String(e.message).match(/\d[\d.]*/) || [""])[0] }); } catch {}
+      if (res.status === 429) msg = T("d.err.rate", "Demasiadas peticiones seguidas. Espera un minuto.");
       if (res.status === 402 && state.viaCode) { state.courtesy.remaining = 0; paintCourtesy(); }
       return { error: msg, retry: res.status === 429 || res.status >= 500, wait: res.status === 429 ? 8000 : 0 };
     }
@@ -298,15 +309,15 @@
           const line = chunk.split("\n").find((l) => l.startsWith("data: ")); if (!line) continue;
           let ev; try { ev = JSON.parse(line.slice(6)); } catch { continue; }
           if (ev.type === "frome_route") {
-            if (!acc.route) { acc.route = ev.route; if (governed) traceDone(ui, "gate", ev.route === "public" ? "ruta pública" : ""); }
+            if (!acc.route) { acc.route = ev.route; if (governed) traceDone(ui, "gate", ev.route === "public" ? T("d.route.public", "ruta pública") : ""); }
           } else if (ev.type === "frome_modules") {
             if (ui.trace && !ui.trace.querySelector("li.mods")) {
               const li = document.createElement("li"); li.className = "ok mods"; li.dataset.id = "mods";
-              const b = document.createElement("b"); b.textContent = "Módulos"; const sp = document.createElement("span"); sp.textContent = ev.labels.length ? ev.labels.join(" · ") : "ninguno (reglas base)";
+              const b = document.createElement("b"); b.textContent = T("a.mods.h", "Módulos"); const sp = document.createElement("span"); sp.textContent = ev.labels.length ? ev.labels.map(modLabel).join(" · ") : T("d.mods.none", "ninguno (reglas base)");
               li.appendChild(b); li.appendChild(sp); ui.trace.insertBefore(li, ui.trace.firstChild);
             }
           } else if (ev.type === "frome_stage") {
-            if (ev.status === "running") traceRow(ui, ev.id, ev.label, ev.detail); else traceDone(ui, ev.id, ev.note);
+            if (ev.status === "running") traceRow(ui, ev.id, T("stage." + ev.id, ev.label), T("stage." + ev.id + ".d", ev.detail)); else traceDone(ui, ev.id, I.fragments(ev.note));
           } else if (ev.type === "frome_continue") cont = ev.state;
           else if (ev.type === "frome_deliver") acc.kind = ev.kind;
           else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") {
@@ -316,21 +327,21 @@
           else if (ev.type === "frome_usage") { acc.usage = ev.usage; done = true; }
           else if (ev.type === "frome_truncated") acc.truncated = true;
           else if (ev.type === "frome_blocked") { acc.held = true; done = true; }
-          else if (ev.type === "error") err = { error: (ev.error && ev.error.message) || "Error", retry: Boolean(ev.error && ev.error.retryable) };
+          else if (ev.type === "error") err = { error: I.phrase((ev.error && ev.error.message) || "Error"), retry: Boolean(ev.error && ev.error.retryable) };
         }
       }
-    } catch { err = err || { error: "Se ha interrumpido la respuesta.", retry: true }; }
+    } catch { err = err || { error: T("d.err.cut", "Se ha interrumpido la respuesta."), retry: true }; }
     if (err) return err;
     if (cont) return { cont };
     if (done) return { done: true };
-    return { error: "La etapa no ha terminado a tiempo.", retry: true };
+    return { error: T("d.err.late", "La etapa no ha terminado a tiempo."), retry: true };
   }
 
   async function ask({ governed, messages, thread, label, meta }) {
     const ui = addMsg(thread, "assistant", "", { streaming: true, label, trace: governed });
     const acc = { text: "", signal: "", kind: "answer", held: false, truncated: false, usage: null, route: null };
     const t0 = performance.now();
-    if (governed) { ui.body.hidden = true; traceRow(ui, "gate", "Comprobación de entrada", "llamada breve a un modelo rápido"); }
+    if (governed) { ui.body.hidden = true; traceRow(ui, "gate", T("d.gate", "Comprobación de entrada"), T("d.gate.d", "llamada breve a un modelo rápido")); }
     let token = null, tries = 0;
     const modules = activeModules(); // fijados para toda la respuesta
     for (;;) {
@@ -345,20 +356,20 @@
       throw new Error(r.error);
     }
     ui.body.hidden = false; ui.body.classList.remove("streaming");
-    let text = acc.text;
+    let text = I.phrase(acc.text); // los textos fijos del servidor se muestran en el idioma elegido
     if (acc.held) {
       // El servidor ha retenido la respuesta: se descarta lo mostrado.
-      text = "Respuesta retenida: lo solicitado forma parte de la configuración interna de FromE Chat y no se divulga. Puedes continuar con tu trabajo.";
+      text = T("d.held", "Respuesta retenida: lo solicitado forma parte de la configuración interna de FromE Chat y no se divulga. Puedes continuar con tu trabajo.");
       ui.body.classList.add("held");
     } else {
-      if (acc.truncated) text += "\n\n[Respuesta cortada antes de terminar: límite de tiempo o de espacio de salida.]";
+      if (acc.truncated) text += "\n\n" + T("d.truncated", "[Respuesta cortada antes de terminar: límite de tiempo o de espacio de salida.]");
       if (acc.kind === "notice") ui.body.classList.add("held");
     }
     if (acc.held || acc.kind === "notice") ui.body.textContent = text; else paint(ui.body, text);
-    if (acc.signal && !acc.held) { const sg = document.createElement("span"); sg.className = "signal"; sg.textContent = "⟶ Signal: " + acc.signal; ui.body.appendChild(sg); }
+    if (acc.signal && !acc.held) { const sg = document.createElement("span"); sg.className = "signal"; sg.textContent = "⟶ Signal: " + I.fragments(acc.signal); ui.body.appendChild(sg); }
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     const u = acc.usage;
-    meta.textContent = (u ? u.calls + (u.calls === 1 ? " llamada · " : " llamadas · ") + u.input + " in" + (u.cached ? " (" + u.cached + " de caché)" : "") + " · " + u.output + " out · " : "") + secs + " s";
+    meta.textContent = (u ? (u.calls === 1 ? T("d.call1", "1 llamada") : T("d.calln", "{n} llamadas", { n: u.calls })) + " · " + u.input + " in" + (u.cached ? " " + T("d.cached", "({n} de caché)", { n: u.cached }) : "") + " · " + u.output + " out · " : "") + secs + " s";
     ui.thread.scrollTop = ui.thread.scrollHeight;
     return text;
   }
@@ -374,12 +385,12 @@
     addMsg(el.threadA, "user", text);
     state.history.push({ role: "user", content: text });
     const drop = (h) => { if (h.length && h[h.length - 1].role === "user") h.pop(); };
-    const jobs = [ask({ governed: gov, messages: state.history.slice(), thread: el.threadA, label: gov ? "Con From E™" : "Sin arquitectura", meta: el.metaA })
+    const jobs = [ask({ governed: gov, messages: state.history.slice(), thread: el.threadA, label: gov ? T("d.with", "Con From E™") : T("d.without", "Sin arquitectura"), meta: el.metaA })
       .then((t) => state.history.push({ role: "assistant", content: t }), () => drop(state.history))];
     if (cmp) {
       addMsg(el.threadB, "user", text);
       state.historyB.push({ role: "user", content: text });
-      jobs.push(ask({ governed: false, messages: state.historyB.slice(), thread: el.threadB, label: "Sin arquitectura", meta: el.metaB })
+      jobs.push(ask({ governed: false, messages: state.historyB.slice(), thread: el.threadB, label: T("d.without", "Sin arquitectura"), meta: el.metaB })
         .then((t) => state.historyB.push({ role: "assistant", content: t }), () => drop(state.historyB)));
     }
     try { await Promise.all(jobs); }
@@ -390,8 +401,8 @@
     if (state.busy) return;
     state.history = []; state.historyB = []; state.sessionId = cryptoId();
     el.threadA.innerHTML = ""; el.threadB.innerHTML = ""; el.metaA.textContent = ""; el.metaB.textContent = "";
-    const e = document.createElement("div"); e.className = "empty"; e.innerHTML = "<h3>Nueva conversación.</h3><p>El hilo anterior se ha descartado de tu navegador. No queda guardado en ningún sitio.</p>";
-    el.threadA.appendChild(e); el.empty = e;
+    const e = document.createElement("div"); e.className = "empty"; e.innerHTML = '<h3 data-i18n="d.reset.h">Nueva conversación.</h3><p data-i18n="d.reset.p">El hilo anterior se ha descartado de tu navegador. No queda guardado en ningún sitio.</p>';
+    el.threadA.appendChild(e); el.empty = e; I.apply(e);
     syncToggles();
   }
 
@@ -408,6 +419,13 @@
   el.input.addEventListener("input", autosize);
   document.addEventListener("click", (e) => { const b = e.target.closest("[data-ex]"); if (b) { el.input.value = b.getAttribute("data-ex"); autosize(); el.input.focus(); el.input.setSelectionRange(el.input.value.length, el.input.value.length); } });
   function autosize() { el.input.style.height = "auto"; el.input.style.height = Math.min(220, el.input.scrollHeight) + "px"; }
+
+  // Al cambiar de idioma se repinta lo que este archivo ha escrito. La conversación no se toca.
+  I.onChange(() => {
+    if (mods.data) buildModules(mods.data, true);
+    syncToggles(); refreshKeyState();
+    const n = state.courtesy.note || []; paintCourtesy(n[0], n[1], n[2]);
+  });
 
   /* ---------- arranque ---------- */
   (async () => {

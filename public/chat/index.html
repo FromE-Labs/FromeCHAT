@@ -6,121 +6,125 @@
   <meta name="robots" content="noindex">
   <title>FromE Chat</title>
   <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/i18n.js"></script>
+  <script src="/assets/lang-en.js"></script>
+  <script src="/assets/lang-fr.js"></script>
 </head>
 <body>
-<nav aria-label="Navegación principal">
+<nav aria-label="Navegación principal" data-i18n-attr="aria-label:c.nav">
   <div class="wrap nav-inner" style="width:calc(100% - 44px);max-width:none">
     <a class="brand" href="/"><span>From<span style="color:var(--accent)">E</span> Chat</span> <span class="by">by From E™ Systems</span></a>
     <div class="navlinks">
       <span class="pill on" id="pill-gov"><span class="dot"></span> From E™ activa</span>
     </div>
-    <div style="display:flex;gap:10px">
-      <button class="btn secondary" id="btn-new" type="button">Nueva conversación</button>
-      <a class="btn ghost" href="/">Qué se prueba</a>
+    <div class="nav-right">
+      <div class="langs" role="group" aria-label="Idioma" data-i18n-attr="aria-label:c.lang"><button type="button" data-lang="es" lang="es" title="Español">ES</button><button type="button" data-lang="en" lang="en" title="English">EN</button><button type="button" data-lang="fr" lang="fr" title="Français">FR</button></div>
+      <button class="btn secondary" id="btn-new" type="button" data-i18n="a.new">Nueva conversación</button>
+      <a class="btn ghost" href="/" data-i18n="a.what">Qué se prueba</a>
     </div>
   </div>
 </nav>
 
 <div class="app">
-  <aside class="sidebar" aria-label="Configuración de la sesión">
+  <aside class="sidebar" aria-label="Configuración de la sesión" data-i18n-attr="aria-label:a.side.aria">
     <div>
-      <h4>Tu clave de API</h4>
-      <p>Clave de la consola de Anthropic (empieza por <code>sk-ant-</code>). Se envía con cada mensaje y no se almacena en el servidor.</p>
+      <h4 data-i18n="a.key.h">Tu clave de API</h4>
+      <p data-i18n="a.key.p">Clave de la consola de Anthropic (empieza por <code>sk-ant-</code>). Se envía con cada mensaje y no se almacena en el servidor.</p>
       <div class="field">
         <div class="keyrow">
-          <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" aria-label="Clave de API de Anthropic">
-          <button class="btn secondary" id="btn-eye" type="button" aria-label="Mostrar u ocultar la clave" style="padding:0 12px">👁</button>
+          <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" aria-label="Clave de API de Anthropic" data-i18n-attr="aria-label:a.key.aria">
+          <button class="btn secondary" id="btn-eye" type="button" aria-label="Mostrar u ocultar la clave" data-i18n-attr="aria-label:a.key.eye" style="padding:0 12px">👁</button>
         </div>
       </div>
       <label class="toggle" id="t-remember" style="margin-top:8px">
         <input type="checkbox" id="remember">
-        <span><b>Recordar en este navegador</b><small>Guardada cifrada en tu dispositivo. Nunca en nuestro servidor.</small></span>
+        <span><b data-i18n="a.rem.b">Recordar en este navegador</b><small data-i18n="a.rem.s">Guardada cifrada en tu dispositivo. Nunca en nuestro servidor.</small></span>
       </label>
       <p class="state" id="key-state" style="margin-top:8px"></p>
     </div>
 
     <div id="courtesy-box" hidden>
-      <h4>Código de invitación</h4>
-      <p>Si te han dado un código, escríbelo aquí y prueba sin clave: incluye unas preguntas de cortesía.</p>
+      <h4 data-i18n="a.code.h">Código de invitación</h4>
+      <p data-i18n="a.code.p">Si te han dado un código, escríbelo aquí y prueba sin clave: incluye unas preguntas de cortesía.</p>
       <div class="field">
-        <input id="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="FE-XXXX-XXXX-XXXX" aria-label="Código de invitación" style="text-transform:uppercase">
+        <input id="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="FE-XXXX-XXXX-XXXX" aria-label="Código de invitación" data-i18n-attr="aria-label:a.code.h" style="text-transform:uppercase">
       </div>
       <p class="state" id="code-state" style="margin-top:8px"></p>
     </div>
 
     <div>
-      <h4>Modelo</h4>
+      <h4 data-i18n="a.model.h">Modelo</h4>
       <div class="field">
-        <select id="model" aria-label="Modelo de frontera"></select>
+        <select id="model" aria-label="Modelo de frontera" data-i18n-attr="aria-label:a.model.aria"></select>
       </div>
     </div>
 
     <div>
-      <h4>La prueba</h4>
+      <h4 data-i18n="a.test.h">La prueba</h4>
       <label class="toggle on" id="t-compare">
         <input type="checkbox" id="compare" checked>
-        <span><b>Comparador</b><small>El mismo mensaje y el mismo modelo, con y sin From E™, lado a lado. Es la forma de juzgar la arquitectura en tu propio caso.</small></span>
+        <span><b data-i18n="a.cmp.b">Comparador</b><small data-i18n="a.cmp.s">El mismo mensaje y el mismo modelo, con y sin From E™, lado a lado. Es la forma de juzgar la arquitectura en tu propio caso.</small></span>
       </label>
       <label class="toggle on" id="t-governed" style="margin-top:8px">
         <input type="checkbox" id="governed" checked>
-        <span><b>From E™ activa</b><small>Cada mensaje se responde en servidor bajo la arquitectura, en dos llamadas: una comprobación de entrada breve y una generación con los módulos que tengas marcados. Con el comparador apagado, puedes desactivarla.</small></span>
+        <span><b data-i18n="a.gov.b">From E™ activa</b><small data-i18n="a.gov.s">Cada mensaje se responde en servidor bajo la arquitectura, en dos llamadas: una comprobación de entrada breve y una generación con los módulos que tengas marcados. Con el comparador apagado, puedes desactivarla.</small></span>
       </label>
     </div>
 
     <div id="mods-box" hidden>
-      <h4>Nivel <span class="beta">beta</span></h4>
-      <p class="state" style="margin:0 0 8px">Elige cuánto quieres que trabaje el modelo. De menos a más consumo:</p>
+      <h4 data-i18n="a.level.h">Nivel <span class="beta">beta</span></h4>
+      <p class="state" style="margin:0 0 8px" data-i18n="a.level.p">Elige cuánto quieres que trabaje el modelo. De menos a más consumo:</p>
       <div class="presets" id="presets"></div>
-      <h4 style="margin-top:18px">Módulos</h4>
-      <p class="state" style="margin:0 0 8px">O ajusta a mano: enciende o apaga cada módulo y compara el efecto con la respuesta directa.</p>
+      <h4 style="margin-top:18px" data-i18n="a.mods.h">Módulos</h4>
+      <p class="state" style="margin:0 0 8px" data-i18n="a.mods.p">O ajusta a mano: enciende o apaga cada módulo y compara el efecto con la respuesta directa.</p>
       <div id="modules"></div>
     </div>
 
     <div>
-      <h4>Tu aportación</h4>
+      <h4 data-i18n="a.con.h">Tu aportación</h4>
       <label class="toggle" id="t-consent">
         <input type="checkbox" id="consent">
-        <span><b>Aportar esta sesión a la medición</b><small>Este banco de pruebas existe para medir From E™ con casos reales. Si lo activas, se guardan la conversación, el modelo, la condición (con o sin From E™), los módulos activos y el resumen del ciclo, con un hash de evidencia. Nunca tu clave, ni correo, ni IP. No incluyas datos personales de terceros. Es tu decisión en cada sesión y no cambia el funcionamiento.</small></span>
+        <span><b data-i18n="a.con.b">Aportar esta sesión a la medición</b><small data-i18n="a.con.s">Este banco de pruebas existe para medir From E™ con casos reales. Si lo activas, se guardan la conversación, el modelo, la condición (con o sin From E™), los módulos activos y el resumen del ciclo, con un hash de evidencia. Nunca tu clave, ni correo, ni IP. No incluyas datos personales de terceros. Es tu decisión en cada sesión y no cambia el funcionamiento.</small></span>
       </label>
       <p class="state" id="sid" style="margin-top:8px" hidden></p>
     </div>
 
-    <div class="foot">FromE Chat by From E™ Systems · <a href="/privacidad/">Privacidad</a> · <a href="https://frome-one.com/es/" target="_blank" rel="noopener">Servicios From E™ ONE</a> · <a href="https://doi.org/10.5281/zenodo.19041459" target="_blank" rel="noopener">Especificación</a></div>
+    <div class="foot" data-i18n="a.foot">FromE Chat by From E™ Systems · <a href="/privacidad/">Privacidad</a> · <a href="https://frome-one.com/es/" target="_blank" rel="noopener">Servicios From E™ ONE</a> · <a href="https://doi.org/10.5281/zenodo.19041459" target="_blank" rel="noopener">Especificación</a></div>
   </aside>
 
-  <section class="main" aria-label="Conversación">
+  <section class="main" aria-label="Conversación" data-i18n-attr="aria-label:a.main.aria">
     <div class="banner" id="banner">
-      <span><b>Comparador activo.</b> Cada mensaje se responde dos veces con el mismo modelo: con From E™ y sin arquitectura.</span>
-      <button class="btn secondary" id="btn-compare-off" type="button">Desactivar</button>
+      <span data-i18n="a.banner"><b>Comparador activo.</b> Cada mensaje se responde dos veces con el mismo modelo: con From E™ y sin arquitectura.</span>
+      <button class="btn secondary" id="btn-compare-off" type="button" data-i18n="a.banner.off">Desactivar</button>
     </div>
     <div class="panes compare" id="panes">
       <div class="pane" id="pane-a">
         <div class="pane-head"><b id="head-a">Con From E™</b><span id="meta-a"></span></div>
         <div class="thread" id="thread-a">
           <div class="empty" id="empty">
-            <h3>Ponla a prueba con un caso tuyo.</h3>
-            <p>Escribe una pregunta real de tu trabajo. Aquí verás la respuesta gobernada por From E™; al lado, la del mismo modelo sin arquitectura.</p>
+            <h3 data-i18n="a.empty.h">Ponla a prueba con un caso tuyo.</h3>
+            <p data-i18n="a.empty.p">Escribe una pregunta real de tu trabajo. Aquí verás la respuesta gobernada por From E™; al lado, la del mismo modelo sin arquitectura.</p>
             <div class="ex">
-              <button type="button" data-ex="Revisa este razonamiento y señala cada punto donde doy algo por supuesto sin verificarlo: ">Revisar un razonamiento y separar hecho de supuesto</button>
-              <button type="button" data-ex="Tengo que decidir entre dos opciones. Te doy el contexto y quiero que me devuelvas criterios de decisión, no una recomendación: ">Preparar una decisión con criterios, sin que decida por mí</button>
-              <button type="button" data-ex="Te describo un sistema de IA y su uso previsto. Dime qué controles de supervisión humana faltan y qué no puedes afirmar con lo que te doy: ">Evaluar la supervisión humana de un sistema de IA</button>
-              <button type="button" data-ex="Resume este documento en tres niveles: lo verificable, lo interpretado por el autor y lo que no se puede saber a partir del texto: ">Resumir en tres niveles: verificable, interpretado, no observable</button>
+              <button type="button" data-ex="Revisa este razonamiento y señala cada punto donde doy algo por supuesto sin verificarlo: " data-i18n="a.ex1" data-i18n-attr="data-ex:a.ex1.v">Revisar un razonamiento y separar hecho de supuesto</button>
+              <button type="button" data-ex="Tengo que decidir entre dos opciones. Te doy el contexto y quiero que me devuelvas criterios de decisión, no una recomendación: " data-i18n="a.ex2" data-i18n-attr="data-ex:a.ex2.v">Preparar una decisión con criterios, sin que decida por mí</button>
+              <button type="button" data-ex="Te describo un sistema de IA y su uso previsto. Dime qué controles de supervisión humana faltan y qué no puedes afirmar con lo que te doy: " data-i18n="a.ex3" data-i18n-attr="data-ex:a.ex3.v">Evaluar la supervisión humana de un sistema de IA</button>
+              <button type="button" data-ex="Resume este documento en tres niveles: lo verificable, lo interpretado por el autor y lo que no se puede saber a partir del texto: " data-i18n="a.ex4" data-i18n-attr="data-ex:a.ex4.v">Resumir en tres niveles: verificable, interpretado, no observable</button>
             </div>
           </div>
         </div>
       </div>
       <div class="pane" id="pane-b">
-        <div class="pane-head"><b>Sin arquitectura</b><span id="meta-b"></span></div>
+        <div class="pane-head"><b data-i18n="a.noarch">Sin arquitectura</b><span id="meta-b"></span></div>
         <div class="thread" id="thread-b"></div>
       </div>
     </div>
     <form class="composer" id="composer">
       <div class="composer-inner">
-        <textarea id="input" rows="1" placeholder="Escribe tu mensaje. Enter envía, Mayús+Enter salta de línea." aria-label="Mensaje"></textarea>
-        <button class="btn" id="btn-send" type="submit">Enviar</button>
+        <textarea id="input" rows="1" placeholder="Escribe tu mensaje. Enter envía, Mayús+Enter salta de línea." aria-label="Mensaje" data-i18n-attr="placeholder:a.input.ph;aria-label:a.input.aria"></textarea>
+        <button class="btn" id="btn-send" type="submit" data-i18n="a.send">Enviar</button>
       </div>
       <div class="hint">
-        <span id="hint-left">Tu clave se usa solo en cada petición. La conversación vive en tu navegador y no se guarda: sin cuentas, sin historial.</span>
+        <span id="hint-left" data-i18n="a.hint">Tu clave se usa solo en cada petición. La conversación vive en tu navegador y no se guarda: sin cuentas, sin historial.</span>
         <span id="hint-right"></span>
       </div>
     </form>

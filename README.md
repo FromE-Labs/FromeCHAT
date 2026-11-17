@@ -127,6 +127,16 @@ Variables de entorno en Netlify:
 
 Sin `COURTESY_KEY` o sin códigos, el campo no aparece y la función no existe. La clave de cortesía nunca llega al navegador ni a ningún registro; los errores del proveedor se sustituyen por un mensaje genérico. Si el proveedor falla sin entregar nada, la pregunta no se descuenta.
 
+## Idiomas
+
+La web y el chat están en español de España, inglés y francés.
+
+- **Texto de origen.** El español está en el propio HTML y en `public/assets/app.js`. `public/assets/lang-en.js` y `public/assets/lang-fr.js` contienen las traducciones, una clave por línea, y se corrigen ahí directamente.
+- **Elección del idioma.** Por este orden: el parámetro `?lang=es|en|fr`, la elección guardada en el navegador y el idioma del navegador. Catalán, gallego y euskera reciben el español; cualquier otro idioma, el inglés. El selector ES · EN · FR de la cabecera cambia el idioma sin recargar y sin perder la conversación.
+- **Lo que llega del servidor.** Los nombres de niveles y módulos, la traza, la línea de señal y los errores llegan en español y se traducen en el navegador (`public/assets/i18n.js`). Lo que no tenga traducción se muestra en español.
+- **Las respuestas del modelo** van en el idioma en que escribe el usuario; el idioma de la interfaz no las cambia.
+- **Añadir un texto.** En HTML, `data-i18n="clave"` en el elemento, o `data-i18n-attr="atributo:clave"` para un atributo. En `app.js`, `T("clave", "texto en español")`. `tests/i18n.test.mjs` falla si falta la traducción de una clave.
+
 ## Coste por mensaje
 
 Las reglas de la arquitectura viajan como instrucciones del sistema y se guardan en la caché del proveedor. El primer mensaje de cada persona, y cada mensaje tras cinco minutos de pausa, paga la escritura de esa caché; los siguientes pagan solo la lectura. Por eso el tamaño de las instrucciones es un coste directo del producto y se mide en cada cambio.
