@@ -5,7 +5,6 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "c.nav": "Main navigation",
  "c.lang": "Language",
  "c.spec": "Specification",
- "c.code": "Code",
  "c.privacy": "Privacy",
  "c.home": "Home",
  "url.frome": "https://frome-one.com/en/",
