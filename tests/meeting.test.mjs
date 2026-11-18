@@ -183,6 +183,42 @@ test("Mistral: se pide razonamiento bajo y, si el modelo no lo admite, se repite
   });
 });
 
+test("leer un archivo: la imagen o el PDF van al modelo con vista en su formato, y vuelve la transcripción", async () => {
+  const IMG = "aGVsbG8gd29ybGQ=";
+  await env({ MEETING_TOKEN: TOKEN }, async () => {
+    let s = stub(() => sse([{ type: "content_block_delta", delta: { type: "text_delta", text: "Ana: hola\nLuis: buenas" } }, { type: "message_delta", usage: { output_tokens: 8 } }]));
+    try {
+      const ev = await events(await post(P + "/leer/anthropic", { model: "claude-opus-5-5", kind: "image", mime: "image/jpeg", data: IMG, name: "captura.png" }, { "x-provider-key": "sk-ant-u" }));
+      assert.equal(ev.find((e) => e.t).t, "Ana: hola\nLuis: buenas");
+      const content = s.calls[0].body.messages[0].content;
+      assert.deepEqual(content[0], { type: "image", source: { type: "base64", media_type: "image/jpeg", data: IMG } });
+      assert.match(content[1].text, /Transcribe fielmente/);
+      assert.equal(s.calls[0].body.max_tokens, 8000);
+    } finally { s.restore(); }
+    s = stub(() => sse([{ type: "content_block_delta", delta: { type: "text_delta", text: "x" } }]));
+    try {
+      await events(await post(P + "/leer/anthropic", { model: "m", kind: "pdf", data: IMG, name: "a.pdf" }, { "x-provider-key": "k" }));
+      assert.deepEqual(s.calls[0].body.messages[0].content[0], { type: "document", source: { type: "base64", media_type: "application/pdf", data: IMG } });
+    } finally { s.restore(); }
+    s = stub(() => sse([{ choices: [{ delta: { content: "texto" } }] }]));
+    try {
+      await events(await post(P + "/leer/openai", { model: "gpt-4o", kind: "image", mime: "image/png", data: IMG }, { "x-provider-key": "k" }));
+      assert.deepEqual(s.calls[0].body.messages[1].content[1], { type: "image_url", image_url: { url: "data:image/png;base64," + IMG } });
+      await events(await post(P + "/leer/openai", { model: "gpt-4o", kind: "pdf", data: IMG, name: "contrato.pdf" }, { "x-provider-key": "k" }));
+      assert.deepEqual(s.calls[1].body.messages[1].content[1], { type: "file", file: { filename: "contrato.pdf", file_data: "data:application/pdf;base64," + IMG } });
+      await events(await post(P + "/leer/mistral", { model: "m", kind: "image", mime: "image/webp", data: IMG }, { "x-provider-key": "k" }));
+      assert.equal(s.calls[2].body.messages[1].content[1].image_url, "data:image/webp;base64," + IMG);
+    } finally { s.restore(); }
+    const no = async (path, body) => (await post(P + path, body, { "x-provider-key": "k" })).status;
+    assert.equal(await no("/leer/deepseek", { model: "m", kind: "image", mime: "image/png", data: IMG }), 400, "DeepSeek no lee imágenes");
+    assert.equal(await no("/leer/mistral", { model: "m", kind: "pdf", data: IMG }), 400, "Mistral no lee PDF por esta vía");
+    assert.equal(await no("/leer/openai", { model: "m", kind: "image", mime: "image/svg+xml", data: IMG }), 400);
+    assert.equal(await no("/leer/openai", { model: "m", kind: "image", mime: "image/png", data: "no es base64 <>" }), 400);
+    assert.equal(await no("/leer/openai", { model: "m", kind: "image", mime: "image/png", data: "A".repeat(5600001) }), 413);
+    assert.equal(await no("/leer/openai", { model: "", kind: "image", mime: "image/png", data: IMG }), 400);
+  });
+});
+
 test("el turno de Claude usa su formato y repite sin el nivel de razonamiento si el modelo no lo admite", async () => {
   await env({ MEETING_TOKEN: TOKEN }, async () => {
     const s = stub((c, n) => (n === 1 ? new Response(JSON.stringify({ error: { message: "output_config no admitido" } }), { status: 400 }) : sse([{ type: "message_start", message: { usage: { input_tokens: 300 } } }, { type: "content_block_delta", delta: { type: "text_delta", text: "De acuerdo en parte." } }, { type: "message_delta", usage: { output_tokens: 9 } }])));

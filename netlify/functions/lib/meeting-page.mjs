@@ -1,5 +1,6 @@
 // Página de la sala de reunión. La sirve netlify/functions/meeting.mjs solo con la contraseña
-// correcta en la ruta. Todo va en un único documento: sin recursos externos.
+// correcta en la ruta. Todo va en un único documento; lo único que se carga de fuera, y solo
+// al añadir un PDF, es la biblioteca que los lee (pdf.js).
 // (El guion de la página no usa plantillas de texto, para poder vivir dentro de esta.)
 export const PAGE = String.raw`<!doctype html>
 <html lang="es">
@@ -73,6 +74,13 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
 .btn.hold{border-color:var(--warn);color:var(--warn)}
 .say .voice{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:10px;font-size:12.5px;color:var(--muted)}
 .say .voice label{display:flex;gap:7px;align-items:center;cursor:pointer}
+.f{display:flex;gap:8px;align-items:center;border:1px solid var(--line);background:#070a0e;padding:6px 9px;margin-top:6px;font-size:12.5px}
+.f b{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.f span{color:var(--muted);white-space:nowrap}
+.f button{border:0;background:none;color:var(--muted);cursor:pointer;padding:0 2px;font-size:12px;text-decoration:underline;text-underline-offset:3px}
+.f.work b{color:var(--warn)}
+.f.bad span{color:var(--bad);white-space:normal}
+body.drop #log{outline:2px dashed var(--accent);outline-offset:-10px}
 .say .sep{width:1px;align-self:stretch;background:var(--line2);margin:0 2px}
 #conf{display:none}
 @media(max-width:900px){
@@ -105,7 +113,9 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
     </div></details>
     <details open><summary>Orden del día y material</summary><div>
       <textarea id="brief" placeholder="De qué va la reunión y qué material tienen todos delante. Lo leen los cuatro antes de cada intervención."></textarea>
-      <div class="row" style="margin-top:8px"><label class="btn" style="cursor:pointer">Añadir archivo de texto<input type="file" id="file" accept=".md,.txt,.csv,.json,text/*" multiple hidden></label></div>
+      <div class="row" style="margin-top:8px"><label class="btn" style="cursor:pointer">Añadir archivos<input type="file" id="file" accept=".md,.txt,.csv,.json,.pdf,image/*,text/*,application/pdf" multiple hidden></label></div>
+      <div id="files"></div>
+      <p class="hint" id="files-note">PDF, imágenes y texto. También puedes arrastrarlos a la sala o pegar una captura con Ctrl+V.</p>
     </div></details>
     <details><summary>Reglas de la sala</summary><div>
       <textarea id="rules" style="min-height:220px"></textarea>
@@ -167,7 +177,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
   /* ---------- estado ---------- */
   function fresh() {
     var people = {}; ORDER.forEach(function (p) { people[p] = { on: true, model: "", key: "" }; });
-    return { people: people, remember: true, rotate: true, voice: false, rules: RULES, brief: "", log: [], next: 0 };
+    return { people: people, remember: true, rotate: true, voice: false, rules: RULES, brief: "", files: [], log: [], next: 0 };
   }
   function load() {
     var s = fresh();
@@ -178,6 +188,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
         s.remember = raw.remember !== false; s.rotate = raw.rotate !== false; s.voice = raw.voice === true;
         s.rules = typeof raw.rules === "string" && raw.rules.trim() && !outdated(raw.rules) ? raw.rules : RULES;
         s.brief = raw.brief || ""; s.next = raw.next || 0;
+        s.files = Array.isArray(raw.files) ? raw.files.filter(function (f) { return f && f.name && typeof f.text === "string"; }) : [];
         s.log = Array.isArray(raw.log) ? raw.log.filter(function (e) { return e && e.text; }) : [];
       }
     } catch (e) {}
@@ -291,6 +302,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
     var out = "";
     if (CTX.text.trim()) out += "CONTEXTO PERMANENTE DE LA SALA, conocido por todos los participantes:\n\n" + CTX.text.trim() + "\n\n---\n\n";
     if (S.brief.trim()) out += "ORDEN DEL DÍA Y MATERIAL, aportado por la moderadora:\n\n" + S.brief.trim() + "\n\n---\n\n";
+    if (S.files.length) out += "ARCHIVOS APORTADOS POR LA MODERADORA, transcritos para todos los participantes:\n\n" + S.files.map(function (f) { return "### " + f.name + "\n\n" + f.text.trim(); }).join("\n\n") + "\n\n---\n\n";
     var t = transcript(entry);
     out += "TRANSCRIPCIÓN DE LA REUNIÓN HASTA AHORA:\n\n" + (t || "(todavía no ha hablado nadie)") + "\n\n---\n\nTe toca intervenir a ti, " + NAMES[p] + ". Escribe solo tu intervención, sin poner tu nombre delante.";
     return out;
@@ -433,6 +445,125 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
   function micHold() { if (rec && listening) { rec.onresult = null; try { rec.stop(); } catch (x) {} } }
   function micResume() { if (wantMic && !busy && !speaking) setTimeout(micStart, 350); else micPaint(); }
 
+  /* ---------- archivos: PDF, imágenes y texto ---------- */
+  // Todo archivo acaba convertido en texto, que es lo que leen los cuatro por igual. El texto de
+  // un PDF se saca aquí mismo; las imágenes y los PDF escaneados los transcribe un participante
+  // con vista (Claude o, si no está, ChatGPT).
+  var PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/";
+  var jobs = [];
+  function filesPaint() {
+    var box = $("#files"); box.innerHTML = "";
+    S.files.forEach(function (f) {
+      var row = el("div", "f"); row.appendChild(el("b", "", f.name)); row.appendChild(el("span", "", f.text.length.toLocaleString("es-ES") + " car."));
+      var up = el("button", "", "al contexto"); up.title = "Añadirlo al contexto permanente, para todas las reuniones";
+      var del = el("button", "", "quitar");
+      up.addEventListener("click", function () { CTX.text = CTX.text.replace(/\s+$/, "") + (CTX.text.trim() ? "\n\n" : "") + "## Documento: " + f.name + "\n\n" + f.text.trim() + "\n"; $("#ctx").value = CTX.text; ctxSave(); up.textContent = "añadido"; up.disabled = true; });
+      del.addEventListener("click", function () { var i = S.files.indexOf(f); if (i >= 0) { S.files.splice(i, 1); save(); filesPaint(); } });
+      row.appendChild(up); row.appendChild(del); box.appendChild(row);
+    });
+    jobs.forEach(function (j) {
+      var row = el("div", "f " + (j.bad ? "bad" : "work")); row.appendChild(el("b", "", j.name)); row.appendChild(el("span", "", j.note));
+      if (j.bad) { var x = el("button", "", "quitar"); x.addEventListener("click", function () { jobs.splice(jobs.indexOf(j), 1); filesPaint(); }); row.appendChild(x); }
+      box.appendChild(row);
+    });
+    var total = S.files.reduce(function (n, f) { return n + f.text.length; }, 0);
+    var note = $("#files-note");
+    if (total > 150000) { note.textContent = "Mucho material (" + total.toLocaleString("es-ES") + " caracteres): cada turno cuesta más y puede no caberle a algún modelo."; note.style.color = "var(--warn)"; }
+    else { note.textContent = "PDF, imágenes y texto. También puedes arrastrarlos a la sala o pegar una captura con Ctrl+V."; note.style.color = ""; }
+  }
+  function reader(kind) {
+    if (hasKey("anthropic") && S.people.anthropic.model) return "anthropic";
+    if (hasKey("openai") && S.people.openai.model) return "openai";
+    if (kind === "image" && hasKey("mistral") && S.people.mistral.model) return "mistral";
+    return "";
+  }
+  function b64(buf) { var bytes = new Uint8Array(buf), out = "", i; for (i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(out); }
+  async function transcribe(att) {
+    var p = reader(att.kind);
+    if (!p) throw new Error("Para leer imágenes hace falta Claude o ChatGPT en la sala.");
+    var headers = { "content-type": "application/json" }; if (S.people[p].key) headers["x-provider-key"] = S.people[p].key;
+    var res = await fetch(BASE + "/leer/" + p, { method: "POST", headers: headers, body: JSON.stringify({ model: S.people[p].model, kind: att.kind, mime: att.mime, data: att.data, name: att.name }) });
+    var raw = await res.text(), text = "", err = "", cut = false;
+    if (!res.ok) { try { err = JSON.parse(raw).error; } catch (x) { err = "Error " + res.status; } throw new Error(err); }
+    raw.split("\n\n").forEach(function (chunk) { if (chunk.indexOf("data: ") !== 0) return; try { var ev = JSON.parse(chunk.slice(6)); if (typeof ev.t === "string") text += ev.t; if (ev.error) err = ev.error; if (ev.cut) cut = true; } catch (x) {} });
+    if (!text) throw new Error(err || "No se ha podido leer.");
+    return text.trim() + (cut ? "\n[…lectura cortada por tiempo…]" : "");
+  }
+  function jpeg(canvas) { return canvas.toDataURL("image/jpeg", 0.86).split(",")[1]; }
+  function imageData(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var k = Math.min(1, 1800 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+        var g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url); resolve(jpeg(c));
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error("No se ha podido abrir la imagen.")); };
+      img.src = url;
+    });
+  }
+  function pdfLib() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    return new Promise(function (resolve, reject) {
+      var sc = document.createElement("script"); sc.src = PDFJS + "pdf.min.js";
+      sc.onload = function () { if (!window.pdfjsLib) return reject(new Error("pdf")); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js"; resolve(window.pdfjsLib); };
+      sc.onerror = function () { reject(new Error("pdf")); };
+      document.head.appendChild(sc);
+    });
+  }
+  async function readPdf(file, job) {
+    var buf = await file.arrayBuffer(), lib = null;
+    try { lib = await pdfLib(); } catch (x) {}
+    if (!lib) { // sin la biblioteca: el PDF entero a un participante que sepa leerlo
+      if (file.size > 4000000) throw new Error("PDF demasiado grande para leerlo de una vez.");
+      job.note = "leyendo…"; filesPaint();
+      return transcribe({ kind: "pdf", mime: "application/pdf", data: b64(buf), name: file.name });
+    }
+    var doc = await lib.getDocument({ data: new Uint8Array(buf) }).promise, n = doc.numPages, pages = [], chars = 0, i;
+    for (i = 1; i <= n; i++) {
+      job.note = "página " + i + " de " + n; filesPaint();
+      var page = await doc.getPage(i), tc = await page.getTextContent(), t = "";
+      tc.items.forEach(function (it) { if (typeof it.str !== "string") return; t += it.str; if (it.hasEOL) t += "\n"; else if (it.str && !/\s$/.test(it.str)) t += " "; });
+      t = t.replace(/[ \t]+\n/g, "\n").replace(/[ \t]{2,}/g, " ").trim(); chars += t.length; pages.push(t);
+    }
+    if (chars >= 80 * n) return pages.map(function (t, k) { return (n > 1 ? "[página " + (k + 1) + "]\n" : "") + t; }).join("\n\n");
+    // PDF escaneado: cada página se convierte en imagen y se transcribe.
+    var max = Math.min(n, 40), out = [];
+    for (i = 1; i <= max; i++) {
+      job.note = "transcribiendo página " + i + " de " + max; filesPaint();
+      var pg = await doc.getPage(i), base = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(2.4, 1700 / Math.max(base.width, base.height)) });
+      var c = document.createElement("canvas"); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+      await pg.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+      out.push("[página " + i + "]\n" + (await transcribe({ kind: "image", mime: "image/jpeg", data: jpeg(c), name: file.name + " · página " + i })));
+    }
+    if (n > max) out.push("[…el PDF tiene " + n + " páginas; se han leído las " + max + " primeras…]");
+    return out.join("\n\n");
+  }
+  function readText(file) { return new Promise(function (resolve, reject) { var r = new FileReader(); r.onload = function () { resolve(String(r.result || "")); }; r.onerror = function () { reject(new Error("No se ha podido leer.")); }; r.readAsText(file); }); }
+  var filing = Promise.resolve();
+  function addFiles(list) {
+    list.forEach(function (file, k) {
+      var name = file.name && file.name !== "image.png" ? file.name : "captura-" + hhmm(Date.now()).replace(":", "") + (list.length > 1 ? "-" + (k + 1) : "") + ".png";
+      var job = { name: name, note: "en cola…", bad: false }; jobs.push(job);
+      filing = filing.then(async function () {
+        try {
+          var isPdf = /pdf$/i.test(file.type) || /\.pdf$/i.test(name), isImg = /^image\//.test(file.type), text;
+          job.note = "leyendo…"; filesPaint();
+          if (isPdf) text = await readPdf(file, job);
+          else if (isImg) text = await transcribe({ kind: "image", mime: "image/jpeg", data: await imageData(file), name: name });
+          else text = await readText(file);
+          text = String(text || "").trim();
+          if (!text) throw new Error("No tiene texto que se pueda leer.");
+          if (text.length > 400000) text = text.slice(0, 400000) + "\n[…recortado por longitud…]";
+          jobs.splice(jobs.indexOf(job), 1); S.files.push({ name: name, text: text }); save();
+        } catch (x) { job.bad = true; job.note = (x && x.message) || "No se ha podido leer."; }
+        filesPaint();
+      });
+    });
+    filesPaint();
+  }
+
   /* ---------- contexto permanente: la memoria de la sala ---------- */
   function ctxNote(text, bad) { var n = $("#ctx-note"); n.textContent = text; n.style.color = bad ? "var(--bad)" : ""; }
   function ctxLoad() {
@@ -484,6 +615,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
     var seen = {}; S.log.forEach(function (e) { if (e.who !== "mod" && !e.error) seen[e.name] = e.model; });
     out.push("Participantes: " + (Object.keys(seen).map(function (n) { return n + " (" + seen[n] + ")"; }).join(", ") || "ninguno") + ".", "");
     if (S.brief.trim()) out.push("## Orden del día y material", "", S.brief.trim(), "");
+    if (S.files.length) out.push("Archivos aportados: " + S.files.map(function (f) { return f.name; }).join(", ") + ".", "");
     out.push("## Transcripción", "");
     S.log.forEach(function (e) { if (e.error) return; out.push("**" + e.name + "** · " + hhmm(e.ts) + (e.cut ? " · cortado por tiempo" : ""), "", e.text.trim(), ""); });
     return out.join("\n");
@@ -513,17 +645,14 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
   $("#rules").addEventListener("input", function (e) { S.rules = e.target.value; save(); });
   $("#rules-reset").addEventListener("click", function () { S.rules = RULES; $("#rules").value = RULES; save(); });
   $("#brief").addEventListener("input", function (e) { S.brief = e.target.value; save(); });
-  $("#file").addEventListener("change", function (ev) {
-    var files = Array.prototype.slice.call(ev.target.files || []);
-    var read = function (i) {
-      if (i >= files.length) { ev.target.value = ""; $("#brief").value = S.brief; save(); return; }
-      var r = new FileReader();
-      r.onload = function () { S.brief = (S.brief.trim() ? S.brief.trim() + "\n\n" : "") + "### " + files[i].name + "\n\n" + String(r.result || "").trim(); read(i + 1); };
-      r.onerror = function () { read(i + 1); };
-      r.readAsText(files[i]);
-    };
-    read(0);
-  });
+  $("#file").addEventListener("change", function (ev) { var list = Array.prototype.slice.call(ev.target.files || []); ev.target.value = ""; addFiles(list); });
+  var depth = 0;
+  window.addEventListener("dragenter", function (e) { if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0) { depth += 1; document.body.classList.add("drop"); } });
+  window.addEventListener("dragleave", function () { depth = Math.max(0, depth - 1); if (!depth) document.body.classList.remove("drop"); });
+  window.addEventListener("dragover", function (e) { if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0) e.preventDefault(); });
+  window.addEventListener("drop", function (e) { depth = 0; document.body.classList.remove("drop"); if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) { e.preventDefault(); addFiles(Array.prototype.slice.call(e.dataTransfer.files)); } });
+  window.addEventListener("paste", function (e) { var fs = e.clipboardData && e.clipboardData.files ? Array.prototype.slice.call(e.clipboardData.files) : []; if (fs.length) { e.preventDefault(); addFiles(fs); } });
+  filesPaint();
   $("#round").addEventListener("click", round);
   $("#only").addEventListener("click", function () { takeSay(); });
   $("#stop").addEventListener("click", function () { stopFlag = true; hush(); if (ctl) ctl.abort(); });
@@ -553,8 +682,8 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
   // Dos pestañas de la sala abiertas: la que no está trabajando sigue a la otra.
   window.addEventListener("storage", function (ev) {
     if (busy || ev.key !== LS) return;
-    var other = load(); S.log = other.log; S.brief = other.brief; S.next = other.next;
-    $("#brief").value = S.brief; renderLog();
+    var other = load(); S.log = other.log; S.brief = other.brief; S.next = other.next; S.files = other.files;
+    $("#brief").value = S.brief; renderLog(); filesPaint();
   });
   renderLog(); paint();
   fetch(BASE + "/estado").then(function (r) { return r.json(); }).then(function (j) { serverKey = (j && j.serverKey) || serverKey; }).catch(function () {}).then(function () {

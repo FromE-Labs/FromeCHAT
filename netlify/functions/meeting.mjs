@@ -165,17 +165,38 @@ async function eachEvent(res, signal, onEvent) {
   }
 }
 
-async function openTurn(provider, { key, model, system, prompt, signal }) {
+// Quién sabe leer qué. DeepSeek solo admite texto.
+export const READERS = { anthropic: ["image", "pdf"], openai: ["image", "pdf"], mistral: ["image"], deepseek: [] };
+const READ_SYSTEM = "Eres un transcriptor. Devuelves solo el contenido del archivo, sin comentarios tuyos.";
+const READ_PROMPT = "Transcribe fielmente todo el texto de este archivo, en su idioma original y en su orden de lectura. Si es una conversación o la captura de un chat, escribe cada mensaje en su línea, con quien habla delante. Conserva las tablas como tablas de texto y los títulos como títulos. Si hay una imagen, un gráfico o un elemento visual sin texto, descríbelo en una línea entre corchetes. No resumas, no interpretes, no corrijas y no añadas nada tuyo. Si no hay nada legible, responde solo: [sin contenido legible].";
+const MAX_FILE = 5600000; // caracteres en base64: unos 4 MB de archivo, lo que admite una petición
+
+// Contenido del mensaje: texto solo, o texto más un archivo (imagen o PDF) que hay que leer.
+function userContent(provider, prompt, attach) {
+  if (!attach) return prompt;
+  if (PROVIDERS[provider].kind === "anthropic") {
+    const file = attach.kind === "pdf"
+      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: attach.data } }
+      : { type: "image", source: { type: "base64", media_type: attach.mime, data: attach.data } };
+    return [file, { type: "text", text: prompt }];
+  }
+  const url = "data:" + attach.mime + ";base64," + attach.data;
+  if (attach.kind === "pdf") return [{ type: "text", text: prompt }, { type: "file", file: { filename: attach.name || "documento.pdf", file_data: url } }];
+  return [{ type: "text", text: prompt }, { type: "image_url", image_url: provider === "mistral" ? url : { url } }];
+}
+
+async function openTurn(provider, { key, model, system, prompt, attach, signal }) {
   const P = PROVIDERS[provider];
+  const content = userContent(provider, prompt, attach);
   if (P.kind === "anthropic") {
-    const body = { model, max_tokens: P.cap, system, messages: [{ role: "user", content: prompt }], stream: true };
+    const body = { model, max_tokens: attach ? 8000 : P.cap, system, messages: [{ role: "user", content }], stream: true };
     const send = (b) => fetch(P.base + "/messages", { method: "POST", signal, headers: { "content-type": "application/json", ...authHeaders(P, key) }, body: JSON.stringify(b) });
     // Razonamiento previo al mínimo para que el turno quepa en el tiempo; si el modelo no lo admite, sin él.
     let res = await send({ ...body, output_config: { effort: "low" } });
     if (res.status === 400) res = await send(body);
     return res;
   }
-  const body = { model, stream: true, messages: [{ role: "system", content: system }, { role: "user", content: prompt }], [P.tokenParam]: P.cap };
+  const body = { model, stream: true, messages: [{ role: "system", content: system }, { role: "user", content }], [P.tokenParam]: P.cap };
   if (P.usage) body.stream_options = { include_usage: true };
   const send = (b) => fetch(P.base + "/chat/completions", { method: "POST", signal, headers: { "content-type": "application/json", ...authHeaders(P, key) }, body: JSON.stringify(b) });
   if (provider === "mistral") {
@@ -187,7 +208,7 @@ async function openTurn(provider, { key, model, system, prompt, signal }) {
   return send(body);
 }
 
-function turn(provider, { key, model, system, prompt }) {
+function turn(provider, { key, model, system, prompt, attach }) {
   const P = PROVIDERS[provider];
   const enc = new TextEncoder();
   const stream = new ReadableStream({
@@ -202,7 +223,7 @@ function turn(provider, { key, model, system, prompt }) {
       const usage = { input: 0, output: 0 };
       let chars = 0, thinking = false;
       try {
-        const res = await openTurn(provider, { key, model, system, prompt, signal: ctl.signal });
+        const res = await openTurn(provider, { key, model, system, prompt, attach, signal: ctl.signal });
         if (!res.ok) {
           const e = await providerError(res);
           send({ error: P.name + " (" + e.status + "): " + e.message });
@@ -290,6 +311,22 @@ export default async (req, context, store) => {
     if (!model || !prompt.trim()) return json(400, { error: "Faltan el modelo o el contenido del turno." });
     if (prompt.length > MAX_PROMPT) return json(413, { error: "La reunión es demasiado larga para un turno. Exporta el acta y empieza otra con un resumen." });
     return turn(provider, { key, model, system, prompt });
+  }
+  // Leer un archivo: un modelo con vista transcribe una imagen o un PDF, y ese texto es lo que
+  // después leen todos los participantes por igual.
+  if (action === "leer" && req.method === "POST") {
+    let body;
+    try { body = await req.json(); } catch { return json(400, { error: "Petición mal formada." }); }
+    const model = String(body?.model || "").trim().slice(0, 120);
+    const kind = body?.kind === "pdf" ? "pdf" : "image";
+    const mime = kind === "pdf" ? "application/pdf" : String(body?.mime || "");
+    const data = String(body?.data || "");
+    if (!READERS[provider].includes(kind)) return json(400, { error: PROVIDERS[provider].name + " no puede leer " + (kind === "pdf" ? "PDF" : "imágenes") + "." });
+    if (!model || !data) return json(400, { error: "Faltan el modelo o el archivo." });
+    if (kind === "image" && !/^image\/(png|jpeg|webp|gif)$/.test(mime)) return json(400, { error: "Formato de imagen no admitido." });
+    if (data.length > MAX_FILE) return json(413, { error: "El archivo es demasiado grande para leerlo de una vez." });
+    if (!/^[A-Za-z0-9+/]+=*$/.test(data)) return json(400, { error: "El archivo no ha llegado bien." });
+    return turn(provider, { key, model, system: READ_SYSTEM, prompt: READ_PROMPT, attach: { kind, mime, data, name: String(body?.name || "").slice(0, 200) } });
   }
   return gone();
 };
