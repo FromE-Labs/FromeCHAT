@@ -152,6 +152,37 @@ test("texto que llega troceado por tipos (Mistral): se entrega el texto y el raz
   assert.equal(mod.deltaText(undefined), "");
 });
 
+test("contexto permanente: se guarda en el servidor y vuelve tal cual; sin contraseña no existe", async () => {
+  const mem = new Map();
+  const store = { get: async (k) => (mem.has(k) ? JSON.parse(mem.get(k)) : null), setJSON: async (k, v) => void mem.set(k, JSON.stringify(v)) };
+  const call = (method, path, body) => meeting(new Request("http://x" + path, { method, body: body === undefined ? undefined : JSON.stringify(body) }), {}, store);
+  await env({ MEETING_TOKEN: TOKEN }, async () => {
+    assert.deepEqual(await (await call("GET", P + "/contexto")).json(), { text: "", updated: null });
+    const put = await (await call("PUT", P + "/contexto", { text: "Quién modera: Esmeralda.\nFrom E™ es…" })).json();
+    assert.equal(put.ok, true);
+    const got = await (await call("GET", P + "/contexto")).json();
+    assert.equal(got.text, "Quién modera: Esmeralda.\nFrom E™ es…");
+    assert.equal(got.updated, put.updated);
+    assert.equal((await call("PUT", P + "/contexto", { text: "x".repeat(120001) })).status, 413);
+    assert.equal((await call("DELETE", P + "/contexto")).status, 404);
+    assert.equal((await call("GET", "/reunion/otra-contraseña-distinta-012345/contexto")).status, 404);
+  });
+  await env({}, async () => assert.equal((await call("GET", P + "/contexto")).status, 404));
+});
+
+test("Mistral: se pide razonamiento bajo y, si el modelo no lo admite, se repite sin él", async () => {
+  await env({ MEETING_TOKEN: TOKEN }, async () => {
+    const s = stub((c, n) => (n === 1 ? new Response(JSON.stringify({ message: "Extra inputs are not permitted" }), { status: 422 }) : sse([{ choices: [{ delta: { content: "Vale." } }] }])));
+    try {
+      const ev = await events(await post(P + "/turno/mistral", { model: "mistral-large-latest", prompt: "x" }, { "x-provider-key": "k" }));
+      assert.equal(ev.find((e) => e.t).t, "Vale.");
+      assert.equal(s.calls.length, 2);
+      assert.equal(s.calls[0].body.reasoning_effort, "low");
+      assert.equal(s.calls[1].body.reasoning_effort, undefined);
+    } finally { s.restore(); }
+  });
+});
+
 test("el turno de Claude usa su formato y repite sin el nivel de razonamiento si el modelo no lo admite", async () => {
   await env({ MEETING_TOKEN: TOKEN }, async () => {
     const s = stub((c, n) => (n === 1 ? new Response(JSON.stringify({ error: { message: "output_config no admitido" } }), { status: 400 }) : sse([{ type: "message_start", message: { usage: { input_tokens: 300 } } }, { type: "content_block_delta", delta: { type: "text_delta", text: "De acuerdo en parte." } }, { type: "message_delta", usage: { output_tokens: 9 } }])));

@@ -99,6 +99,10 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
     <p class="hint">Las claves las pegas tú. Viajan solo con cada petición, hacia su proveedor, y el servidor no las guarda.</p>
   </div>
   <div class="box"><h4>La reunión</h4>
+    <details open><summary>Contexto permanente</summary><div>
+      <textarea id="ctx" style="min-height:150px" placeholder="Lo que todos saben de ti y de tu trabajo. Lo leen los cuatro antes de cada intervención, en todas las reuniones."></textarea>
+      <p class="hint" id="ctx-note">Se guarda en tu servidor y vale para todas las reuniones y dispositivos.</p>
+    </div></details>
     <details open><summary>Orden del día y material</summary><div>
       <textarea id="brief" placeholder="De qué va la reunión y qué material tienen todos delante. Lo leen los cuatro antes de cada intervención."></textarea>
       <div class="row" style="margin-top:8px"><label class="btn" style="cursor:pointer">Añadir archivo de texto<input type="file" id="file" accept=".md,.txt,.csv,.json,text/*" multiple hidden></label></div>
@@ -110,6 +114,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
   </div>
   <div class="box"><h4>Acta</h4>
     <div class="row"><button class="btn" id="export">Descargar acta</button><button class="btn" id="copy">Copiar acta</button><button class="btn" id="new">Nueva reunión</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="keep">Guardar las conclusiones en el contexto</button></div>
     <p class="hint" id="acta-note">La transcripción se guarda solo en este navegador.</p>
   </div>
 </aside>
@@ -188,6 +193,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
       $("#acta-note").textContent = "La transcripción se guarda solo en este navegador.";
     } catch (e) { $("#acta-note").textContent = "No se ha podido guardar en este navegador: descarga el acta antes de cerrar."; }
   }
+  var CTX = { text: "", timer: null };
   var serverKey = { anthropic: false };
   var busy = false, stopFlag = false, ctl = null;
   var ui = {};
@@ -279,10 +285,11 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
   }
   function systemFor(p) {
     var others = present().map(function (x) { return NAMES[x]; }).join(", ");
-    return S.rules.trim() + "\n\nTú eres " + NAMES[p] + ". En la transcripción tus intervenciones anteriores aparecen como [" + NAMES[p] + "] y las de la moderadora como [" + MOD + "]. Participantes en la sala: " + others + ".";
+    return S.rules.trim() + (CTX.text.trim() ? "\n\nConoces el contexto permanente de la sala: es lo que ya sabes de la moderadora y de su trabajo. No pidas que te lo vuelva a explicar ni digas que no tienes información si está ahí." : "") + "\n\nTú eres " + NAMES[p] + ". En la transcripción tus intervenciones anteriores aparecen como [" + NAMES[p] + "] y las de la moderadora como [" + MOD + "]. Participantes en la sala: " + others + ".";
   }
   function promptFor(p, entry) {
     var out = "";
+    if (CTX.text.trim()) out += "CONTEXTO PERMANENTE DE LA SALA, conocido por todos los participantes:\n\n" + CTX.text.trim() + "\n\n---\n\n";
     if (S.brief.trim()) out += "ORDEN DEL DÍA Y MATERIAL, aportado por la moderadora:\n\n" + S.brief.trim() + "\n\n---\n\n";
     var t = transcript(entry);
     out += "TRANSCRIPCIÓN DE LA REUNIÓN HASTA AHORA:\n\n" + (t || "(todavía no ha hablado nadie)") + "\n\n---\n\nTe toca intervenir a ti, " + NAMES[p] + ". Escribe solo tu intervención, sin poner tu nombre delante.";
@@ -426,6 +433,49 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
   function micHold() { if (rec && listening) { rec.onresult = null; try { rec.stop(); } catch (x) {} } }
   function micResume() { if (wantMic && !busy && !speaking) setTimeout(micStart, 350); else micPaint(); }
 
+  /* ---------- contexto permanente: la memoria de la sala ---------- */
+  function ctxNote(text, bad) { var n = $("#ctx-note"); n.textContent = text; n.style.color = bad ? "var(--bad)" : ""; }
+  function ctxLoad() {
+    return fetch(BASE + "/contexto").then(function (r) { return r.json(); }).then(function (j) {
+      CTX.text = j.text || ""; $("#ctx").value = CTX.text;
+      try { localStorage.setItem(LS + ".ctx", CTX.text); } catch (e) {}
+      ctxNote(CTX.text ? "Cargado del servidor" + (j.updated ? " · última edición " + new Date(j.updated).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "") + "." : "Vacío. Lo que escribas aquí lo sabrán los cuatro en todas las reuniones.");
+    }).catch(function () {
+      try { CTX.text = localStorage.getItem(LS + ".ctx") || ""; } catch (e) {}
+      $("#ctx").value = CTX.text; ctxNote("No se ha podido leer del servidor: se usa la copia de este navegador.", true);
+    });
+  }
+  function ctxSave() {
+    clearTimeout(CTX.timer);
+    try { localStorage.setItem(LS + ".ctx", CTX.text); } catch (e) {}
+    return fetch(BASE + "/contexto", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: CTX.text }) }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); }).then(function (x) {
+      ctxNote(x.ok ? "Guardado en el servidor · " + hhmm(Date.now()) : (x.j.error || "No se ha podido guardar."), !x.ok);
+    }).catch(function () { ctxNote("No se ha podido guardar en el servidor.", true); });
+  }
+  // Al terminar una reunión, un participante la resume y el resumen se añade al contexto.
+  function keep() {
+    var p = ready("anthropic") ? "anthropic" : present()[0];
+    var t = transcript(null), b = $("#keep");
+    if (busy || !p || !t) return;
+    var who = S.people[p], headers = { "content-type": "application/json" }; if (who.key) headers["x-provider-key"] = who.key;
+    b.disabled = true; b.textContent = "Resumiendo…";
+    var system = "Eres el secretario de una reunión de trabajo. Escribes en español, sin adornos y sin opinar.";
+    var prompt = (S.brief.trim() ? "ORDEN DEL DÍA:\n\n" + S.brief.trim() + "\n\n---\n\n" : "") + "TRANSCRIPCIÓN:\n\n" + t + "\n\n---\n\nResume la reunión en un máximo de 150 palabras para que quien no estuvo sepa dónde quedó: tema, acuerdos, desacuerdos entre participantes y lo que queda pendiente o tiene que decidir la moderadora. Texto corrido, sin título.";
+    var done = function (text, err) {
+      b.disabled = false; b.textContent = "Guardar las conclusiones en el contexto";
+      if (!text) { ctxNote(err || "No se ha podido resumir la reunión.", true); return; }
+      var d = new Date(S.log.length ? S.log[0].ts : Date.now()).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+      var base = CTX.text.replace(/\s+$/, "");
+      if (base.indexOf("## Reuniones anteriores") < 0) base += (base ? "\n\n" : "") + "## Reuniones anteriores";
+      CTX.text = base + "\n\n### " + d + "\n\n" + text.trim() + "\n"; $("#ctx").value = CTX.text; ctxSave();
+    };
+    fetch(BASE + "/turno/" + p, { method: "POST", headers: headers, body: JSON.stringify({ model: who.model, system: system, prompt: prompt }) }).then(function (r) { return r.text(); }).then(function (raw) {
+      var text = "", err = "";
+      raw.split("\n\n").forEach(function (chunk) { if (chunk.indexOf("data: ") !== 0) return; try { var ev = JSON.parse(chunk.slice(6)); if (typeof ev.t === "string") text += ev.t; if (ev.error) err = ev.error; } catch (x) {} });
+      done(text, err);
+    }).catch(function () { done("", "Se ha cortado la conexión al resumir."); });
+  }
+
   /* ---------- acta ---------- */
   function acta() {
     var d = new Date(S.log.length ? S.log[0].ts : Date.now());
@@ -497,6 +547,15 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
     S.log = []; S.next = 0; save(); renderLog();
   });
   $("#conf").addEventListener("click", function () { $("#aside").classList.toggle("open"); });
+  $("#ctx").addEventListener("input", function (e) { CTX.text = e.target.value; ctxNote("Sin guardar…"); clearTimeout(CTX.timer); CTX.timer = setTimeout(ctxSave, 900); });
+  $("#keep").addEventListener("click", keep);
+  ctxLoad();
+  // Dos pestañas de la sala abiertas: la que no está trabajando sigue a la otra.
+  window.addEventListener("storage", function (ev) {
+    if (busy || ev.key !== LS) return;
+    var other = load(); S.log = other.log; S.brief = other.brief; S.next = other.next;
+    $("#brief").value = S.brief; renderLog();
+  });
   renderLog(); paint();
   fetch(BASE + "/estado").then(function (r) { return r.json(); }).then(function (j) { serverKey = (j && j.serverKey) || serverKey; }).catch(function () {}).then(function () {
     if (serverKey.anthropic) ui.anthropic.key.placeholder = "Opcional: hay una clave en el servidor";

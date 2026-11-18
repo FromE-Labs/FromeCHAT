@@ -10,9 +10,14 @@
 // Claude, si no se pega clave, se usa MEETING_ANTHROPIC_KEY o SELFTEST_KEY si existen.
 //
 // Cada turno es una petición: el servidor llama a un único proveedor y reenvía el texto
-// según llega. No se guarda nada: la transcripción vive en el navegador de la autora.
+// según llega. La transcripción vive en el navegador de la autora.
+//
+// Lo único que guarda el servidor es el contexto permanente de la sala: el texto que la
+// autora aprueba para que todos los participantes lo lean antes de cada intervención, en
+// todas las reuniones. Así ninguna reunión empieza de cero.
 
 import { timingSafeEqual } from "node:crypto";
+import { getStore } from "@netlify/blobs";
 import { PAGE } from "./lib/meeting-page.mjs";
 
 // cap: tope de salida. Va holgado porque en varios modelos el razonamiento previo cuenta dentro
@@ -24,6 +29,8 @@ export const PROVIDERS = {
   anthropic: { name: "Claude", base: "https://api.anthropic.com/v1", kind: "anthropic", cap: 4000 },
 };
 const ANTHROPIC_VERSION = "2023-06-01";
+const CTX_MAX = 120000; // caracteres del contexto permanente
+const defaultStore = () => getStore({ name: "meeting-room", consistency: "strong" });
 const TURN_MS = 52000; // un turno tiene que caber en el tiempo de ejecución de la plataforma
 const MAX_PROMPT = 400000; // caracteres
 
@@ -170,7 +177,14 @@ async function openTurn(provider, { key, model, system, prompt, signal }) {
   }
   const body = { model, stream: true, messages: [{ role: "system", content: system }, { role: "user", content: prompt }], [P.tokenParam]: P.cap };
   if (P.usage) body.stream_options = { include_usage: true };
-  return fetch(P.base + "/chat/completions", { method: "POST", signal, headers: { "content-type": "application/json", ...authHeaders(P, key) }, body: JSON.stringify(body) });
+  const send = (b) => fetch(P.base + "/chat/completions", { method: "POST", signal, headers: { "content-type": "application/json", ...authHeaders(P, key) }, body: JSON.stringify(b) });
+  if (provider === "mistral") {
+    // Sus modelos recientes razonan mucho antes de escribir y el turno no cabía en el tiempo:
+    // se pide el nivel bajo y, si el modelo no lo admite, se llama sin él.
+    const res = await send({ ...body, reasoning_effort: "low" });
+    if (res.status !== 400 && res.status !== 422) return res;
+  }
+  return send(body);
 }
 
 function turn(provider, { key, model, system, prompt }) {
@@ -228,7 +242,25 @@ function turn(provider, { key, model, system, prompt }) {
   return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8", "x-accel-buffering": "no", ...PRIVATE } });
 }
 
-export default async (req) => {
+async function contextRoute(req, store) {
+  if (req.method === "GET") {
+    let saved = null;
+    try { saved = await store.get("contexto", { type: "json" }); } catch {}
+    return json(200, { text: saved?.text || "", updated: saved?.updated || null });
+  }
+  if (req.method === "PUT") {
+    let body;
+    try { body = await req.json(); } catch { return json(400, { error: "Petición mal formada." }); }
+    const text = String(body?.text ?? "");
+    if (text.length > CTX_MAX) return json(413, { error: "El contexto es demasiado largo: recórtalo." });
+    const updated = new Date().toISOString();
+    try { await store.setJSON("contexto", { text, updated }); } catch { return json(502, { error: "No se ha podido guardar el contexto." }); }
+    return json(200, { ok: true, updated });
+  }
+  return gone();
+}
+
+export default async (req, context, store) => {
   const token = (process.env.MEETING_TOKEN || process.env.SELFTEST_TOKEN || "").trim();
   const parts = new URL(req.url).pathname.split("/").filter(Boolean); // reunion / <contraseña> / acción / proveedor
   let given = "";
@@ -242,6 +274,7 @@ export default async (req) => {
   if (action === "estado" && req.method === "GET") {
     return json(200, { serverKey: { anthropic: Boolean((process.env.MEETING_ANTHROPIC_KEY || process.env.SELFTEST_KEY || "").trim()) } });
   }
+  if (action === "contexto") return contextRoute(req, store || defaultStore());
   const provider = parts[3] || "";
   if (!Object.prototype.hasOwnProperty.call(PROVIDERS, provider)) return gone();
   const key = keyFor(provider, req);
