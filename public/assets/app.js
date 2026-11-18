@@ -110,8 +110,12 @@
 
   /* ---------- modelos y módulos ---------- */
   const mods = { defs: [], on: new Set() };
-  function activeModules() { return mods.defs.filter((m) => mods.on.has(m.id)).map((m) => m.id); }
-  function saveModules() { try { localStorage.setItem("fromechat.modules", JSON.stringify(activeModules())); } catch {} }
+  // Interruptores de medición: no salen en la interfaz y solo se añaden por dirección
+  // (?medir=uno.otro). El servidor ignora los que no existan en su despliegue.
+  const measuring = (new URLSearchParams(location.search).get("medir") || "").split(/[.,]/).map((x) => x.trim()).filter((x) => /^[a-z]{2,20}$/.test(x)).slice(0, 6);
+  function shownModules() { return mods.defs.filter((m) => mods.on.has(m.id)).map((m) => m.id); }
+  function activeModules() { return shownModules().concat(measuring.filter((id) => !mods.on.has(id))); }
+  function saveModules() { try { localStorage.setItem("fromechat.modules", JSON.stringify(shownModules())); } catch {} }
   function paintModules() {
     for (const lab of el.mods.querySelectorAll("label.toggle")) {
       const inp = lab.querySelector("input"); inp.checked = mods.on.has(inp.dataset.mod); lab.classList.toggle("on", inp.checked);

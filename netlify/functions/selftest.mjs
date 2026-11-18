@@ -11,7 +11,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { getStore } from "@netlify/blobs";
 import { loadGovernance, PUBLIC_SYSTEM, PUBLIC_EMPTY, UNGOVERNED_SYSTEM } from "./lib/governance.mjs";
-import { pickModules, newState } from "./lib/engine.mjs";
+import { pickModules, newState, computeFlags } from "./lib/engine.mjs";
+import { routingActive, route } from "./lib/router.mjs";
 import { stepCycle } from "./lib/cycle.mjs";
 import { seal, unseal } from "./lib/seal.mjs";
 import { inspect } from "./lib/shield.mjs";
@@ -206,7 +207,17 @@ export default async (req, context) => {
         else G.out = { error: r.message };
         return;
       }
-      if (!G.st) G.st = newState(g.pipeline, { bind: "selftest", ttl: 0, modules });
+      if (!G.st) {
+        // Encaminador por tipo de caso, si alguno de sus interruptores está entre los módulos.
+        const flags = computeFlags(g.pipeline, modules);
+        let routed = null;
+        if (routingActive(g.pipeline, flags)) {
+          routed = await route({ pipeline: g.pipeline, key, messages, flags });
+          G.routed = { types: routed.types, marks: Object.keys(routed.marks), modules: routed.modules, via: routed.via, usage: routed.usage || null };
+        }
+        G.st = newState(g.pipeline, { bind: "selftest", ttl: 0, modules, route: routed });
+        await save();
+      }
       while (left() >= MIN_START_MS) {
         const res = await stepCycle({ g, key, model, messages, st: G.st, stages: G.stages, deadline });
         if (res?.error && res.retryable && G.retries < 3) { G.retries += 1; continue; }
@@ -237,9 +248,15 @@ export default async (req, context) => {
   const B = job.base;
   if (G) {
     const u = G.out?.usage || G.st?.usage || null;
-    const usage = u ? { input: u.input + (G.gateUsage?.input || 0), output: u.output + (G.gateUsage?.output || 0), calls: (u.calls || 0) + (G.gate && !G.forced ? 1 : 0), cached: u.cached || 0, cacheWrite: u.cacheWrite || 0 } : null;
+    const ru = G.routed?.usage || null;
+    const usage = u ? { input: u.input + (G.gateUsage?.input || 0) + (ru?.input || 0), output: u.output + (G.gateUsage?.output || 0) + (ru?.output || 0), calls: (u.calls || 0) + (G.gate && !G.forced ? 1 : 0) + (ru ? 1 : 0), cached: u.cached || 0, cacheWrite: u.cacheWrite || 0 } : null;
     out.push(`=== CON FROM E · ruta ${G.route || "-"}${G.forced ? " (forzada, sin comprobación de entrada)" : ""} · ${usage ? line(usage) : "-"} · ${(G.ms / 1000).toFixed(1)} s`);
     if (G.stages.length) out.push("TRAZA: " + G.stages.map((x) => x.label + (x.note ? ` [${x.note}]` : "")).join(" > "));
+    if (G.routed) {
+      const sent = Object.keys(G.st?.modules || {}).map((m) => g.pipeline.modules?.[m]?.label || m);
+      out.push(`TIPO DE CASO: ${G.routed.via === "error" ? "sin clasificar" : G.routed.types.join(", ") || "ninguno en particular"}${G.routed.marks.length ? " · marcas: " + G.routed.marks.join(", ") : ""} · ${G.routed.modules ? "módulos enviados: " + (sent.join(", ") || "ninguno") : "conjunto completo"}`);
+    }
+    if (G.out && typeof G.out.closing === "number") out.push(`CIERRE: ${G.out.closing ? "pregunta final retirada (" + G.out.closing + ")" : "sin pregunta final"}`);
     // Lo que el filtro ve en el material interno de cada etapa (nunca sale del servidor).
     const vars = Object.entries(G.st?.vars || {});
     if (vars.length) {

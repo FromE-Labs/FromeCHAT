@@ -1,0 +1,56 @@
+{
+ "version": 1,
+ "note": "Pruebas del encaminador por tipo de caso y del cierre sin pregunta. Etapas, etiquetas y textos son inventados.",
+ "start": "una",
+ "max_steps": 4,
+ "stages": {
+  "una": {
+   "label": "Una llamada",
+   "detail": "prueba",
+   "type": "text",
+   "model": "main",
+   "max_tokens": 900,
+   "system": "@runtime",
+   "conversation": true,
+   "input": "ONE-PASS. Feed the heron before noon and say nothing about the weir.",
+   "save": "draft",
+   "tail_when": "flags.por_tipo",
+   "parts": [
+    {"text": "PART-FIXED-A. Wind the clock on the landing every evening before the ferry leaves."},
+    {"when": "modules.w1", "tail": true, "text": "PART-W1. Stack the oars by length against the north wall of the shed."},
+    {"when": "modules.w2", "tail": true, "text": "PART-W2. Chalk the hull number on the slip before the boat is hauled out."},
+    {"when": "modules.w3", "tail": true, "text": "PART-W3. Oil the winch on the quay before the first frost of the year."},
+    {"when": "modules.q", "text": "PART-Q. End with one question about the harbour."},
+    {"text": "PART-FIXED-B. Latch the door of the net shed whenever the wind turns east."}
+   ],
+   "next": [{"deliver": "draft", "signal": "Una llamada"}]
+  }
+ },
+ "modules": {
+  "q": {"label": "Pregunta", "desc": "Pieza de pruebas."},
+  "w1": {"label": "Trabajo uno", "desc": "Pieza de pruebas."},
+  "w2": {"label": "Trabajo dos", "desc": "Pieza de pruebas."},
+  "w3": {"label": "Trabajo tres", "desc": "Pieza de pruebas."},
+  "rt": {"label": "Por tipo", "desc": "medición", "default": false, "hidden": true},
+  "cq": {"label": "Cierre", "desc": "medición", "default": false, "hidden": true}
+ },
+ "flags": {
+  "por_tipo": {"all": ["rt"]},
+  "cierre": {"all": ["cq"]},
+  "solo_q": {"all": ["q"], "none": ["w1", "w2", "w3"]}
+ },
+ "routing": {
+  "when": ["por_tipo", "cierre"],
+  "narrow_when": "por_tipo",
+  "scope": ["w1", "w2", "w3"],
+  "system": "ROUTER-TEST. Label the last message with RED, BLUE, HUSH or ALL.",
+  "labels": {
+   "RED": {"type": "rojo", "modules": ["w1"]},
+   "BLUE": {"type": "azul", "modules": ["w2", "w3"]},
+   "HUSH": {"mark": "noq"},
+   "ALL": {"all": true}
+  },
+  "closing": {"mark": "noq", "when": "flags.cierre", "unless": "flags.solo_q"}
+ },
+ "presets": []
+}

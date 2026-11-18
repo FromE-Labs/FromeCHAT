@@ -20,7 +20,9 @@ import { LeakFilter } from "./lib/shield.mjs";
 import { gate } from "./lib/gate.mjs";
 import { recordTurn } from "./lib/consent.mjs";
 import { openStream, readStream, upstreamError } from "./lib/anthropic.mjs";
-import { runStage, newState, contextOf, getPath, render, pickModules } from "./lib/engine.mjs";
+import { runStage, newState, contextOf, getPath, render, pickModules, computeFlags } from "./lib/engine.mjs";
+import { routingActive, route } from "./lib/router.mjs";
+import { closingApplies, dropClosingQuestion } from "./lib/closing.mjs";
 import { seal, unseal, bindingOf, STATE_TTL_MS } from "./lib/seal.mjs";
 import { courtesyConfig, takeCourtesy, refundCourtesy, COURTESY_MODEL, COURTESY_MAX_CHARS, COURTESY_MAX_TOTAL_CHARS } from "./lib/courtesy.mjs";
 
@@ -249,6 +251,8 @@ function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline, 
       send({ type: "error", error: { message: "El ciclo no ha producido respuesta. Vuelve a enviar el mensaje.", retryable: false } });
       return;
     }
+    // Regla visible: si el usuario pidió que no se le pregunte más, el cierre no es una pregunta.
+    if (!notice && !st.truncated && closingApplies(pipeline, st, ctx)) text = dropClosingQuestion(text).text;
     if (!clean(g, text) || !clean(g, signal)) {
       send({ type: "frome_blocked" });
       return;
@@ -331,8 +335,13 @@ export default async (req) => {
     return cycleStep({ g, st, ...common });
   }
 
-  // Primer paso: clasificador de entrada y, si procede, primera etapa.
-  const verdict = await gate({ key, messages });
+  // Primer paso: clasificador de entrada y, si procede, primera etapa. Si el encaminador
+  // por tipo de caso está activo, sale a la vez que el clasificador: no añade espera.
+  const routing = g.pipeline && routingActive(g.pipeline, computeFlags(g.pipeline, modules));
+  const [verdict, routed] = await Promise.all([
+    gate({ key, messages }),
+    routing ? route({ pipeline: g.pipeline, key, messages, flags: computeFlags(g.pipeline, modules) }).catch(() => null) : null,
+  ]);
   if (verdict.auth === false) {
     if (courtesy) {
       await courtesy.refund();
@@ -340,13 +349,17 @@ export default async (req) => {
     }
     return json(401, { error: "upstream", status: verdict.status, message: verdict.message || "Clave rechazada por el proveedor." });
   }
-  if (verdict.probe) return single({ route: "public", ...common, extraUsage: verdict.usage || { input: 0, output: 0 } });
+  if (verdict.probe) {
+    const extraUsage = { input: (verdict.usage?.input || 0) + (routed?.usage?.input || 0), output: (verdict.usage?.output || 0) + (routed?.usage?.output || 0) };
+    return single({ route: "public", ...common, extraUsage });
+  }
   if (!g.pipeline) return json(500, { error: "governance", message: "La arquitectura no está disponible en este despliegue." });
 
-  const st = newState(g.pipeline, { bind, ttl: STATE_TTL_MS, modules });
-  if (verdict.usage) {
-    st.usage.input += verdict.usage.input;
-    st.usage.output += verdict.usage.output;
+  const st = newState(g.pipeline, { bind, ttl: STATE_TTL_MS, modules, route: routed });
+  for (const u of [verdict.usage, routed?.usage]) {
+    if (!u) continue;
+    st.usage.input += u.input;
+    st.usage.output += u.output;
     st.usage.calls += 1;
   }
   return cycleStep({ g, st, ...common });

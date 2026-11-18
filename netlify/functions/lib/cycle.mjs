@@ -3,6 +3,7 @@
 
 import { runStage, contextOf, getPath, render } from "./engine.mjs";
 import { LeakFilter } from "./shield.mjs";
+import { closingApplies, dropClosingQuestion } from "./closing.mjs";
 
 function clean(g, text) {
   const f = new LeakFilter(g);
@@ -31,9 +32,16 @@ export async function stepCycle({ g, key, model, messages, st, stages, deadline 
   }
   if (!rule || rule.goto) rule = { deliver: "draft", signal: "Ciclo interrumpido — límite de etapas" };
   const notice = rule.deliver_text !== undefined;
-  const text = (notice ? render(rule.deliver_text, ctx, { clip: 160 }) : String(getPath(ctx, rule.deliver) ?? "")).trim();
+  let text = (notice ? render(rule.deliver_text, ctx, { clip: 160 }) : String(getPath(ctx, rule.deliver) ?? "")).trim();
   const signal = render(rule.signal, ctx, { clip: 60 });
   if (!text) return { error: "El ciclo no ha producido respuesta.", retryable: false };
+  // Regla visible: si el usuario pidió que no se le pregunte más, el cierre no es una pregunta.
+  let closing = null;
+  if (!notice && !st.truncated && closingApplies(pipeline, st, ctx)) {
+    const c = dropClosingQuestion(text);
+    text = c.text;
+    closing = c.removed;
+  }
   if (!clean(g, text) || !clean(g, signal)) return { blocked: true };
-  return { text, signal, kind: notice ? "notice" : "answer", truncated: st.truncated };
+  return { text, signal, kind: notice ? "notice" : "answer", truncated: st.truncated, ...(closing === null ? {} : { closing }) };
 }
