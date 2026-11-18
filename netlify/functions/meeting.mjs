@@ -15,11 +15,13 @@
 import { timingSafeEqual } from "node:crypto";
 import { PAGE } from "./lib/meeting-page.mjs";
 
+// cap: tope de salida. Va holgado porque en varios modelos el razonamiento previo cuenta dentro
+// del tope: con uno corto se lo gastan pensando y no llegan a escribir.
 export const PROVIDERS = {
-  openai: { name: "ChatGPT", base: "https://api.openai.com/v1", kind: "openai", cap: 6000, tokenParam: "max_completion_tokens", usage: true },
-  mistral: { name: "Mistral", base: "https://api.mistral.ai/v1", kind: "openai", cap: 2000, tokenParam: "max_tokens", usage: false },
-  deepseek: { name: "DeepSeek", base: "https://api.deepseek.com", kind: "openai", cap: 6000, tokenParam: "max_tokens", usage: true },
-  anthropic: { name: "Claude", base: "https://api.anthropic.com/v1", kind: "anthropic", cap: 3000 },
+  openai: { name: "ChatGPT", base: "https://api.openai.com/v1", kind: "openai", cap: 8000, tokenParam: "max_completion_tokens", usage: true },
+  mistral: { name: "Mistral", base: "https://api.mistral.ai/v1", kind: "openai", cap: 8000, tokenParam: "max_tokens", usage: false },
+  deepseek: { name: "DeepSeek", base: "https://api.deepseek.com", kind: "openai", cap: 8000, tokenParam: "max_tokens", usage: true },
+  anthropic: { name: "Claude", base: "https://api.anthropic.com/v1", kind: "anthropic", cap: 4000 },
 };
 const ANTHROPIC_VERSION = "2023-06-01";
 const TURN_MS = 52000; // un turno tiene que caber en el tiempo de ejecución de la plataforma
@@ -235,7 +237,7 @@ export default async (req) => {
   const action = parts[2] || "";
 
   if (!action && req.method === "GET") {
-    return new Response(PAGE, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "x-frame-options": "DENY", "x-content-type-options": "nosniff", ...PRIVATE } });
+    return new Response(PAGE, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "x-frame-options": "DENY", "x-content-type-options": "nosniff", "permissions-policy": "microphone=(self), camera=(), geolocation=()", ...PRIVATE } });
   }
   if (action === "estado" && req.method === "GET") {
     return json(200, { serverKey: { anthropic: Boolean((process.env.MEETING_ANTHROPIC_KEY || process.env.SELFTEST_KEY || "").trim()) } });

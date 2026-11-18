@@ -69,6 +69,10 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
 .say{border-top:1px solid var(--line);background:var(--panel);padding:12px 22px 16px}
 .say textarea{min-height:64px;max-height:240px;font-size:15px}
 .say .row{margin-top:10px}
+.btn.live{border-color:var(--bad);color:#fff;background:rgba(255,107,107,.16)}
+.btn.hold{border-color:var(--warn);color:var(--warn)}
+.say .voice{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:10px;font-size:12.5px;color:var(--muted)}
+.say .voice label{display:flex;gap:7px;align-items:center;cursor:pointer}
 .say .sep{width:1px;align-self:stretch;background:var(--line2);margin:0 2px}
 #conf{display:none}
 @media(max-width:900px){
@@ -120,6 +124,11 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
       <span class="row" id="floor"></span>
       <button class="btn stop" id="stop" hidden>Parar</button>
     </div>
+    <div class="voice">
+      <button class="btn" id="mic">Micrófono</button>
+      <label><input type="checkbox" id="voice"> Los participantes hablan en voz alta</label>
+      <span id="voice-note">Con el micrófono abierto, termina con «adelante, Mistral» o «ronda completa» para dar la palabra.</span>
+    </div>
   </div>
 </section>
 </div>
@@ -153,7 +162,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
   /* ---------- estado ---------- */
   function fresh() {
     var people = {}; ORDER.forEach(function (p) { people[p] = { on: true, model: "", key: "" }; });
-    return { people: people, remember: true, rotate: true, rules: RULES, brief: "", log: [], next: 0 };
+    return { people: people, remember: true, rotate: true, voice: false, rules: RULES, brief: "", log: [], next: 0 };
   }
   function load() {
     var s = fresh();
@@ -161,7 +170,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
       var raw = JSON.parse(localStorage.getItem(LS) || "null");
       if (raw && raw.people) {
         ORDER.forEach(function (p) { if (raw.people[p]) { s.people[p].on = raw.people[p].on !== false; s.people[p].model = raw.people[p].model || ""; s.people[p].key = raw.people[p].key || ""; } });
-        s.remember = raw.remember !== false; s.rotate = raw.rotate !== false;
+        s.remember = raw.remember !== false; s.rotate = raw.rotate !== false; s.voice = raw.voice === true;
         s.rules = typeof raw.rules === "string" && raw.rules.trim() && !outdated(raw.rules) ? raw.rules : RULES;
         s.brief = raw.brief || ""; s.next = raw.next || 0;
         s.log = Array.isArray(raw.log) ? raw.log.filter(function (e) { return e && e.text; }) : [];
@@ -295,7 +304,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
         if (!ok && !e.text) { e.error = true; e.text = msg || "No ha habido respuesta."; e._body.className = "body err"; e._body.textContent = e.text; }
         else if (!ok && msg) { e.text += "\n\n[" + msg + "]"; e._body.innerHTML = fmt(e.text); }
         e._meta.textContent = metaOf(e);
-        save(); resolve(ok);
+        save(); if (ok) sayAloud(e); resolve(ok);
       };
       fetch(BASE + "/turno/" + p, { method: "POST", headers: headers, signal: ctl.signal, body: JSON.stringify({ model: who.model, system: systemFor(p), prompt: prompt }) }).then(function (res) {
         if (!res.ok || !res.body) return res.json().then(function (j) { finish(false, j.error || "Error " + res.status); }, function () { finish(false, "Error " + res.status); });
@@ -322,7 +331,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
       }).catch(function () { finish(Boolean(e.text) && stopFlag, stopFlag ? "interrumpido" : "Se ha cortado la conexión."); });
     });
   }
-  function setBusy(v) { busy = v; paint(); }
+  function setBusy(v) { busy = v; if (v) micHold(); else micResume(); paint(); }
   function takeSay() {
     var box = $("#say"), text = box.value.trim();
     if (text) { add({ who: "mod", name: MOD, text: text, ts: Date.now() }); box.value = ""; save(); }
@@ -345,6 +354,77 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
     if (S.rotate && list.length > 1) { var k = S.next % list.length; list = list.slice(k).concat(list.slice(0, k)); S.next += 1; }
     run(list);
   }
+
+  /* ---------- voz: los participantes hablan y la moderadora dicta ---------- */
+  var synth = window.speechSynthesis || null;
+  var Rec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  var rec = null, listening = false, wantMic = false, speaking = 0;
+  var PITCH = { openai: 1, mistral: 0.82, deepseek: 1.18, anthropic: 0.94 };
+  var WHO = [["openai", /chat\s*g\s*p\s*t|chat\s*gepet/], ["mistral", /mistral/], ["deepseek", /deep\s*s[ei]+[ck]|dip\s*s[ei]+[ck]/], ["anthropic", /claude|cloud|claud|clod/]];
+  function voiceFor(p) {
+    if (!synth) return null;
+    var list = synth.getVoices().filter(function (v) { return /^es([-_]|$)/i.test(v.lang); });
+    if (!list.length) return null;
+    list.sort(function (a, b) { return (/es[-_]ES/i.test(b.lang) ? 1 : 0) - (/es[-_]ES/i.test(a.lang) ? 1 : 0); });
+    return list[ORDER.indexOf(p) % list.length];
+  }
+  function plain(t) { return t.replace(/\*\*|__/g, "").replace(/^#{1,6}\s+/gm, "").replace(/^\s*[-*•]\s+/gm, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1").replace(/\s+/g, " ").trim(); }
+  // Frases cortas: las voces del navegador se cortan con textos largos.
+  function pieces(t) {
+    var parts = t.match(/[^.!?…:;]+[.!?…:;]*\s*/g) || [t], out = [], cur = "";
+    parts.forEach(function (x) { if ((cur + x).length > 180 && cur) { out.push(cur.trim()); cur = x; } else cur += x; });
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+  function sayAloud(e) {
+    if (!S.voice || !synth || e.error || !e.text) return;
+    var v = voiceFor(e.who);
+    micHold();
+    [e.name + "."].concat(pieces(plain(e.text))).forEach(function (text) {
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = v ? v.lang : "es-ES"; if (v) u.voice = v; u.pitch = PITCH[e.who] || 1; u.rate = 1.06;
+      speaking += 1;
+      u.onend = u.onerror = function () { speaking = Math.max(0, speaking - 1); if (!speaking) micResume(); };
+      synth.speak(u);
+    });
+  }
+  function hush() { if (synth) synth.cancel(); speaking = 0; }
+  function micPaint() {
+    var b = $("#mic");
+    if (!Rec) { b.disabled = true; b.textContent = "Micrófono no disponible"; b.title = "Este navegador no permite dictar. Funciona en Chrome."; return; }
+    b.className = "btn" + (listening ? " live" : wantMic ? " hold" : "");
+    b.textContent = listening ? "Escuchando · pulsa para cerrar" : wantMic ? "Micrófono en espera" : "Micrófono";
+  }
+  // Órdenes de voz al final de lo dictado: «adelante, Mistral» o «ronda completa».
+  function command() {
+    var box = $("#say"), t = box.value, m;
+    if ((m = t.match(/[\s,.;:]*(ronda completa|adelante,?\s+(a\s+)?todos)[\s.!]*$/i))) { box.value = t.slice(0, m.index).trim(); round(); return true; }
+    if ((m = t.match(/[\s,.;:]*adelante,?\s+([a-záéíóúñ ]{3,16})[\s.!]*$/i))) {
+      var name = m[1].toLowerCase(), p = null;
+      WHO.forEach(function (w) { if (!p && w[1].test(name)) p = w[0]; });
+      if (p && ready(p)) { box.value = t.slice(0, m.index).trim(); takeSay(); run([p]); return true; }
+    }
+    return false;
+  }
+  function micStart() {
+    if (!Rec || listening || busy || speaking) { micPaint(); return; }
+    var box = $("#say"), base = box.value ? box.value.replace(/\s+$/, "") + " " : "", fin = "";
+    rec = new Rec(); rec.lang = "es-ES"; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = function (ev) {
+      var interim = "", gotFinal = false;
+      for (var i = ev.resultIndex; i < ev.results.length; i++) { var r = ev.results[i]; if (r.isFinal) { fin += r[0].transcript; gotFinal = true; } else interim += r[0].transcript; }
+      box.value = base + fin + interim;
+      if (gotFinal && !interim) command();
+    };
+    rec.onerror = function (ev) {
+      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") { wantMic = false; $("#voice-note").textContent = "El navegador no tiene permiso para usar el micrófono: actívalo en el candado de la barra de direcciones."; }
+    };
+    rec.onend = function () { listening = false; micPaint(); if (wantMic && !busy && !speaking) setTimeout(micStart, 300); };
+    try { rec.start(); listening = true; } catch (x) { listening = false; }
+    micPaint();
+  }
+  function micHold() { if (rec && listening) { rec.onresult = null; try { rec.stop(); } catch (x) {} } }
+  function micResume() { if (wantMic && !busy && !speaking) setTimeout(micStart, 350); else micPaint(); }
 
   /* ---------- acta ---------- */
   function acta() {
@@ -396,7 +476,12 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
   });
   $("#round").addEventListener("click", round);
   $("#only").addEventListener("click", function () { takeSay(); });
-  $("#stop").addEventListener("click", function () { stopFlag = true; if (ctl) ctl.abort(); });
+  $("#stop").addEventListener("click", function () { stopFlag = true; hush(); if (ctl) ctl.abort(); });
+  $("#mic").addEventListener("click", function () { if (wantMic) { wantMic = false; micHold(); micPaint(); } else { wantMic = true; hush(); micStart(); } });
+  $("#voice").checked = S.voice; if (!synth) { $("#voice").disabled = true; }
+  $("#voice").addEventListener("change", function (e) { S.voice = e.target.checked; if (!S.voice) hush(); save(); });
+  if (synth) { synth.getVoices(); if (synth.addEventListener) synth.addEventListener("voiceschanged", function () {}); }
+  micPaint();
   $("#say").addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); round(); } });
   $("#export").addEventListener("click", function () {
     var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([acta()], { type: "text/markdown;charset=utf-8" })); a.download = "acta-reunion-" + stamp() + ".md";
