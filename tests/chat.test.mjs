@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 process.env.GOVERNANCE_DIR = fileURLToPath(new URL("./fixtures/governance", import.meta.url));
-const chat = (await import("../netlify/functions/chat.mjs")).default;
+const chatModule = await import("../netlify/functions/chat.mjs");
+const chat = chatModule.default;
+const { tap, outward } = chatModule;
 const { loadGovernance } = await import("../netlify/functions/lib/governance.mjs");
 const g = loadGovernance();
 const KEY = "sk-ant-" + "k".repeat(40);
@@ -43,24 +45,34 @@ function stub({ gateWord = "SAFE", gateStatus = 200, alpha = '{"goal":"x"}', bet
   return { calls, kinds: () => calls.map((c) => c.kind), restore: () => (globalThis.fetch = real) };
 }
 
+// events: lo que el servidor emite por dentro (con ruta, etapas y recuentos).
+// wire: lo que sale de verdad hacia el navegador, ya filtrado.
 async function post(payload) {
-  const r = await chat(new Request("http://x/api/chat", { method: "POST", body: JSON.stringify(payload) }));
-  const raw = await r.text();
-  const events = raw.split("\n\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
-  const text = events.filter((e) => e.type === "content_block_delta").map((e) => e.delta.text).join("");
-  return { r, raw, events, text };
+  const events = [];
+  tap.fn = (ev) => events.push(ev);
+  let r, raw;
+  try {
+    r = await chat(new Request("http://x/api/chat", { method: "POST", body: JSON.stringify(payload) }));
+    raw = await r.text();
+  } finally {
+    tap.fn = null;
+  }
+  const wire = raw.split("\n\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
+  const text = wire.filter((e) => e.type === "content_block_delta").map((e) => e.delta.text).join("");
+  return { r, raw, events, wire, text };
 }
 
 // Recorre el ciclo como lo hace el navegador: reenvía el estado sellado hasta la entrega.
 async function cycle(payload, max = 12) {
   let state;
-  const all = { events: [], raw: "", requests: 0, text: "", states: [] };
+  const all = { events: [], wire: [], raw: "", requests: 0, text: "", states: [] };
   for (let i = 0; i < max; i++) {
-    const { r, raw, events, text } = await post({ ...payload, state });
+    const { r, raw, events, wire, text } = await post({ ...payload, state });
     all.requests++;
     all.r = r;
     all.raw += raw;
     all.events.push(...events);
+    all.wire.push(...wire);
     all.text += text;
     const cont = events.find((e) => e.type === "frome_continue");
     if (!cont) break;
@@ -79,6 +91,28 @@ test("rechaza clave inválida y mensajes mal formados", async () => {
   assert.equal(r.status, 400);
   ({ r } = await post({ key: KEY, messages: [{ role: "assistant", content: "x" }] }));
   assert.equal(r.status, 400);
+});
+
+test("hacia el navegador no sale cómo se produce la respuesta: ni ruta, ni etapas, ni módulos, ni recuentos", async () => {
+  const s = stub({ beta: pad(20) + "Listo." });
+  try {
+    const c = await cycle({ key: KEY, model: "claude-opus-5-5", messages: msg("Revisa este presupuesto") });
+    assert.ok(c.events.some((e) => e.type === "frome_stage"), "por dentro el ciclo sigue emitiendo sus etapas");
+    const types = new Set(c.wire.map((e) => e.type));
+    for (const t of ["frome_route", "frome_stage", "frome_modules"]) assert.ok(!types.has(t), `${t} no debe salir`);
+    assert.deepEqual(c.wire.find((e) => e.type === "frome_usage").usage, { input: 300 + 800 * 3, output: 2 + 42 * 3 });
+    assert.equal(c.wire.find((e) => e.type === "frome_signal").text, "Gamma — validada", "la señal sale reducida a su resultado");
+    for (const label of ["Alfa", "Beta", "Gamma —"]) assert.ok(!c.raw.replace("Gamma — validada", "").includes(label) || label === "Gamma —", `la etiqueta de etapa ${label} no debe salir`);
+    assert.ok(!/"calls"|"cached"|"label"|"detail"|"note"|"route"/.test(c.raw));
+    assert.equal(c.text, pad(20).trim() + " Listo.");
+  } finally {
+    s.restore();
+  }
+  assert.equal(outward({ type: "frome_signal", text: "Señal · una llamada" }).text, "Señal");
+  assert.equal(outward({ type: "frome_signal", text: "" }), null);
+  assert.deepEqual(outward({ type: "frome_usage", usage: { input: 5, output: 7, calls: 2, cached: 3, cacheWrite: 9 } }), { type: "frome_usage", usage: { input: 5, output: 7 } });
+  const other = { type: "frome_continue", state: "x" };
+  assert.equal(outward(other), other);
 });
 
 test("ciclo completo: una etapa por petición, entrega validada, señal del servidor, clave no filtrada", async () => {

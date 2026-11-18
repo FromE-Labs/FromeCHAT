@@ -34,17 +34,17 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "h.s1.c4.h": "Your judgment, and your evidence if you wish",
  "h.s1.c4.p": "The verdict is yours. If you also decide to contribute the session, it joins the From E™ measurement series. Off by default.",
  "h.s2.label": "02 — The architecture",
- "h.s2.h2": "Two calls per answer: check and generation. The staged cycle, if you turn it on.",
- "h.s2.lead1": "With From E™ active, your message is answered in two calls: a brief input check by a fast model, and a generation in which the model applies the modules you have switched on. What is delivered also goes through a filter. If you turn on the “Staged cycle” module, the answer runs on the server through the operational flow of the specification (DOI 10.5281/zenodo.19041459) in several separate calls, as described below, and only what passes the final gate is delivered. On screen you see what runs and with what result; you do not see how it is built.",
+ "h.s2.h2": "What From E™ does with each answer.",
+ "h.s2.lead1": "With From E™ active, the model answers subject to the modules you have switched on, and what is delivered is checked first. Below is what each module does, as described in the specification (DOI 10.5281/zenodo.19041459). On screen you see the result; you do not see how it is built.",
  "h.s2.lead2": "You choose how much you spend. There are four levels, from lowest to highest usage. “Key question” does not answer: it returns only the question that most changes the answer, so you can think before deciding. “Key answer” gives the essentials in a few lines. “Complete”, the default level, applies the six modules and compresses the answer. “Advanced analysis” deliberates before answering and develops the answer in full: it takes longer and uses more, and it is meant for serious problems.",
  "h.s2.m1": "Structures the request before generating: what is asked, what is provided, what is missing. If an essential piece of data is missing, it asks instead of assuming.",
  "h.s2.m2": "Fixes the core of the conversation and holds generation to it; whatever departs from the core is drift.",
  "h.s2.m3": "Suppresses flattery, mirroring and structurally empty filler during generation.",
- "h.s2.m4": "Puts the draft under hostile scrutiny in an independent call that did not write it.",
- "h.s2.m5": "Corrects what the scrutiny flags through bounded iteration, without regenerating from scratch.",
+ "h.s2.m4": "Puts the answer through hostile scrutiny before it is delivered.",
+ "h.s2.m5": "Corrects what the scrutiny flags.",
  "h.s2.m6": "Categorical exclusions: structural silence before probable falsehood. If it triggers, the answer is not delivered.",
  "h.s2.m7": "Final gate against the core before delivery.",
- "h.s2.note": "Every governed answer ends with a signal line (Signal System™) composed by the server from what actually happened on the server, not from what the model says about itself. The operational implementation is proprietary and is not disclosed; the modules of the commercial Runtime are not part of this platform.",
+ "h.s2.note": "Every governed answer ends with a signal line (Signal System™) that sums up the outcome. The operational implementation is proprietary and is not disclosed; the modules of the commercial Runtime are not part of this platform.",
  "h.s3.label": "03 — How it works",
  "h.s3.h2": "Three parts. The core never leaves the server.",
  "h.s3.t1.s": "01 · Your browser",
@@ -55,8 +55,8 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "h.s3.t2.p": "It applies the architecture with your key and checks what is delivered. It keeps neither the key nor the conversation.",
  "h.s3.t3.s": "03 · Provider",
  "h.s3.t3.b": "Frontier model",
- "h.s3.t3.p": "Anthropic runs the model and bills you. A governed answer is one model call plus a brief input check; with the staged cycle it is between four and six.",
- "h.s3.note": "The cost of every answer is in plain view: the interface shows the calls made and the tokens used on each side of the comparator. Both sides use the same model, the same output ceiling and the same level of prior reasoning, set to the minimum in this phase so that each call fits within the platform’s execution time.",
+ "h.s3.t3.p": "Anthropic runs the model and bills you. A governed answer uses more than a direct one; with the staged cycle, several times more.",
+ "h.s3.note": "The cost of each answer stays in view: the interface shows the tokens used on each side of the comparator. Both sides use the same model and the same output ceiling.",
  "h.s4.label": "04 — Your key",
  "h.s4.h2": "A key of your own, with a spending cap.",
  "h.s4.lead1": "FromE Chat accepts API keys from the Anthropic console, not Claude accounts. Create a key just for this platform and set a limit on it: that way the maximum risk is the cap you decide yourself.",
@@ -99,7 +99,7 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "a.cmp.b": "Comparator",
  "a.cmp.s": "The same message and the same model, with and without From E™, side by side. It is the way to judge the architecture on your own case.",
  "a.gov.b": "From E™ active",
- "a.gov.s": "Each message is answered on the server under the architecture, in two calls: a brief input check and a generation with the modules you have selected. With the comparator off, you can turn it off.",
+ "a.gov.s": "Each message is answered under the architecture, with the modules you have selected. With the comparator off, you can turn it off.",
  "a.level.h": "Level <span class=\"beta\">beta</span>",
  "a.level.p": "Choose how hard you want the model to work. From lowest to highest usage:",
  "a.mods.h": "Modules",
@@ -133,7 +133,7 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "p.b1.h": "Your API key",
  "p.b1.p": "It is sent over HTTPS to our server with each message, used in that call to the model provider and discarded. It is not written to logs or to any store. If you check “Remember in this browser”, it is stored encrypted on your own device; that encryption protects against casual reading of the storage, not against someone who controls your browser. You can delete it by unchecking the box, and revoke it at any time from the Anthropic console.",
  "p.b2.h": "Your conversations",
- "p.b2.p": "They live in your browser’s memory while the tab is open. The server forwards them to the provider and does not keep them. The provider handles them under its own terms, which are the ones you accepted when you created your key. With the architecture active, each message first goes through a brief input check by a fast model from the same provider and is then answered in one call to the model you chose, with your key. If you turn on the staged cycle, there are several calls and, between one stage and the next, the server hands your browser the encrypted intermediate state, and your browser returns it in the next request: it expires after fifteen minutes and is not stored on the server.",
+ "p.b2.p": "They live in your browser’s memory while the tab is open. The server forwards them to the provider and does not keep them. The provider handles them under its own terms, which are the ones you accepted when you created your key. With the architecture active, answering a message takes several calls to the same provider, all with your key; besides the model you chose, a faster one from the same provider may take part. Between one call and the next the server stores nothing: when needed, the intermediate state travels encrypted to your browser, which returns it in the next request; it expires after fifteen minutes.",
  "p.b3.h": "Research with consent",
  "p.b3.p": "Only if you turn on “Contribute this session to the measurement” does the server store, for each turn: the conversation, the model, the condition (with or without From E™), the token usage, the active modules, the cycle summary (stages run and final signal) and a SHA-256 hash of the record. Your key, your email, your IP address and any identifier of your account are not stored. The session identifier is random, is generated in your browser and is shown on screen while consent is active. The content of the conversation is stored as you write it: do not include third parties’ personal data in a session you contribute. Storage is the site’s own, on the hosting provider’s infrastructure. The data is used for the measurement series of the From E™ architecture and for publications in aggregate form. You can turn consent off at any time; turns already stored can be deleted by writing to the contact address with your session identifier.",
  "p.b4.h": "No accounts, no third-party cookies",
@@ -141,6 +141,7 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "p.b5.h": "Data controller",
  "p.b5.p": "Volyen Project SL (From E™ Systems), Barcelona. Contact: <a href=\"mailto:frome.labs@proton.me\" style=\"text-decoration:underline;text-underline-offset:3px\">frome.labs@proton.me</a>.",
  "p.note": "The full legal text (legal basis, retention periods, GDPR rights) will be added after legal review, before general release.",
+ "d.cost": "With From E™ active, each message uses more than a direct answer.",
  "d.key.none": "No key. Paste one to start.",
  "d.key.ok": "The key format is valid. It will be checked on the first message.",
  "d.key.bad": "Format not recognized: an Anthropic API key starts with sk-ant-.",
@@ -155,8 +156,6 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "d.pill.on": "From E™ active",
  "d.with": "With From E™",
  "d.without": "Without architecture",
- "d.cost3": "Cost per message: 3 calls (input check, governed generation and direct answer); more with the staged cycle",
- "d.cost2": "Cost per message: 2 calls (input check and governed generation); more with the staged cycle",
  "d.sid": "Identifier of this session: {id}",
  "d.you": "You",
  "d.model": "Model",
@@ -164,15 +163,8 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "d.err.rate": "Too many requests in a row. Wait a minute.",
  "d.err.cut": "The response was interrupted.",
  "d.err.late": "The stage did not finish in time.",
- "d.route.public": "public route",
- "d.mods.none": "none (base rules)",
- "d.gate": "Input check",
- "d.gate.d": "brief call to a fast model",
  "d.held": "Answer withheld: what was requested is part of FromE Chat’s internal configuration and is not disclosed. You can carry on with your work.",
  "d.truncated": "[Answer cut off before the end: time limit or output space limit.]",
- "d.call1": "1 call",
- "d.calln": "{n} calls",
- "d.cached": "({n} from cache)",
  "d.reset.h": "New conversation.",
  "d.reset.p": "The previous thread has been discarded from your browser. It is not stored anywhere.",
  "mod.pregunta": "Decisive question",
@@ -188,7 +180,7 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "mod.irreversibles": "Irreversible steps and verification",
  "mod.irreversibles.d": "Reason, consequence, way back and how to know it went well.",
  "mod.etapas": "Staged cycle",
- "mod.etapas.d": "Preparation, review and validation in separate calls. Slower and with higher usage.",
+ "mod.etapas.d": "Applies the full cycle of the specification. Slower and with higher usage.",
  "mod.avanzado": "Advanced analysis",
  "mod.avanzado.d": "Deliberates before answering and develops the answer in full, uncompressed. Slower and with higher usage; for serious problems.",
  "mod.clave": "Key answer",
@@ -201,13 +193,6 @@ window.FromeI18n && window.FromeI18n.register("en", {
  "lvl.completo.d": "The six modules, compressed answer.",
  "lvl.avanzado": "Advanced analysis",
  "lvl.avanzado.d": "Deliberates first and develops. For serious problems.",
- "stage.estructura.d": "structures the request",
- "stage.generacion": "Governed generation",
- "stage.escrutinio.d": "independent review of the draft",
- "stage.iteracion.d": "bounded correction",
- "stage.validacion.d": "final gate",
- "stage.directa": "Governed generation",
- "stage.directa.d": "a single call",
  "err.key": "Invalid Anthropic API key (it starts with sk-ant-).",
  "err.courtesy_off": "Courtesy questions are not active. Use your own Anthropic key.",
  "err.courtesy_state": "The staged cycle is not available with an invitation code.",
@@ -255,10 +240,6 @@ window.FromeI18n && window.FromeI18n.register("en", {
    "validation inconclusive"
   ],
   [
-   "escrutinio no concluyente",
-   "scrutiny inconclusive"
-  ],
-  [
    "no concluyente",
    "inconclusive"
   ],
@@ -281,22 +262,6 @@ window.FromeI18n && window.FromeI18n.register("en", {
   [
    "Pregunta decisiva",
    "Decisive question"
-  ],
-  [
-   "observaciones",
-   "remarks"
-  ],
-  [
-   "iteraciones",
-   "iterations"
-  ],
-  [
-   "iteración",
-   "iteration"
-  ],
-  [
-   "una llamada",
-   "one call"
   ]
  ]
 });

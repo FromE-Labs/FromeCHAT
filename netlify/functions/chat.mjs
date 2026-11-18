@@ -69,6 +69,28 @@ function sanitizeMessages(raw) {
   return out;
 }
 
+// Lo que sale hacia el navegador dice qué se entrega, no cómo se produce: sin ruta, sin
+// módulos, sin etapas, sin recuento de llamadas ni detalle de caché, y con la línea de
+// señal reducida a su resultado.
+export function outward(ev) {
+  switch (ev?.type) {
+    case "frome_route":
+    case "frome_modules":
+    case "frome_stage":
+      return null;
+    case "frome_usage":
+      return { type: "frome_usage", usage: { input: ev.usage?.input || 0, output: ev.usage?.output || 0 } };
+    case "frome_signal": {
+      const text = String(ev.text || "").split(" · ")[0].trim();
+      return text ? { type: "frome_signal", text } : null;
+    }
+    default:
+      return ev;
+  }
+}
+// Solo para las pruebas: recibe cada evento antes de filtrarlo. No sale por la red.
+export const tap = { fn: null };
+
 // Respuesta SSE con latido: run(send) emite eventos; el flujo se cierra al terminar.
 function sse(route, run, extra = {}) {
   const enc = new TextEncoder();
@@ -78,7 +100,11 @@ function sse(route, run, extra = {}) {
       const write = (s) => {
         if (open) controller.enqueue(enc.encode(s));
       };
-      const send = (ev) => write(`data: ${JSON.stringify(ev)}\n\n`);
+      const send = (ev) => {
+        if (tap.fn) tap.fn(ev);
+        const out = outward(ev);
+        if (out) write(`data: ${JSON.stringify(out)}\n\n`);
+      };
       const beat = setInterval(() => write(": ping\n\n"), 10000);
       try {
         send({ type: "frome_route", route });
