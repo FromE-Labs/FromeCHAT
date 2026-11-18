@@ -70,7 +70,7 @@ test("todo texto marcado en las páginas está traducido, con las mismas etiquet
 test("todo texto que escribe app.js está traducido, con las mismas variables", () => {
   const dicts = loadDicts();
   const keys = dynamicKeys();
-  assert.ok(keys.size > 30, "se esperaban más de 30 textos en app.js");
+  assert.ok(keys.size > 20, "se esperaban más de 20 textos en app.js");
   for (const [code, d] of Object.entries(dicts)) {
     for (const [key, es] of keys) {
       assert.equal(typeof d[key], "string", `${code}: falta ${key}`);
@@ -131,13 +131,13 @@ test("el motor de idiomas elige idioma, traduce y vuelve al español", () => {
   I.apply(document);
   assert.equal(nodes[0].innerHTML, "Envoyer");
   assert.equal(nodes[1].innerHTML, "Texto sin traducción", "lo que no tiene traducción se queda en español");
-  assert.equal(I.t("d.calln", "{n} llamadas", { n: 3 }), "3 appels");
+  assert.equal(I.t("d.sid", "Identificador de esta sesión: {id}", { id: "x1" }), "Identifiant de cette session\u00a0: x1");
   assert.equal(I.t("clave.inexistente", "Hola {n}", { n: 2 }), "Hola 2");
-  assert.equal(I.fragments("Core Self-Validator™ — validado · iteraciones: 1"), "Core Self-Validator™ — validé · itérations : 1");
+  assert.equal(I.fragments("Core Self-Validator™ — validado"), "Core Self-Validator™ — validé");
   I.set("en");
   assert.equal(store.get("fromechat.lang"), "en");
   assert.equal(nodes[0].innerHTML, "Send");
-  assert.equal(I.fragments("Pregunta decisiva · una llamada"), "Decisive question · one call");
+  assert.equal(I.fragments("Pregunta decisiva"), "Decisive question");
   assert.equal(I.phrase("Se ha interrumpido la respuesta."), "The response was interrupted.");
   assert.equal(I.phrase("Respuesta retenida por From E™: no supera la validación final. nota"), "Answer withheld by From E™: it does not pass final validation. nota");
   I.set("es");

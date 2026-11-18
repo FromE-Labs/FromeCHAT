@@ -173,6 +173,8 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 /* Espera sin texto: el modelo piensa antes de escribir */
 .msg .body.streaming:empty::before{content:"El modelo está pensando antes de escribir…";color:var(--muted,#8a97a4);font-size:14px}
 .msg .body.streaming:empty::after{content:none}
+html[lang="en"] .msg .body.streaming:empty::before{content:"The model is thinking before writing…"}
+html[lang="fr"] .msg .body.streaming:empty::before{content:"Le modèle réfléchit avant d’écrire…"}
 
 /* Módulos */
 .beta{display:inline-block;margin-left:6px;padding:1px 6px;border:1px solid var(--accent);color:var(--accent);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;vertical-align:1px}
