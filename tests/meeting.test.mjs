@@ -132,6 +132,26 @@ test("un turno llama solo al proveedor pedido y reenvía su texto", async () => 
   });
 });
 
+test("texto que llega troceado por tipos (Mistral): se entrega el texto y el razonamiento no", async () => {
+  await env({ MEETING_TOKEN: TOKEN }, async () => {
+    const s = stub(() => sse([
+      { choices: [{ delta: { content: [{ type: "thinking", thinking: [{ type: "text", text: "a ver…" }] }] } }] },
+      { choices: [{ delta: { content: [{ type: "text", text: "Buenas " }] } }] },
+      { choices: [{ delta: { content: [{ type: "text", text: "tardes." }] } }] },
+      { choices: [{ delta: { content: "" } }], usage: { prompt_tokens: 40, completion_tokens: 5 } },
+    ]));
+    try {
+      const ev = await events(await post(P + "/turno/mistral", { model: "mistral-large-latest", prompt: "x" }, { "x-provider-key": "k" }));
+      assert.equal(ev.filter((e) => e.t !== undefined).map((e) => e.t).join(""), "Buenas tardes.");
+      assert.ok(ev.every((e) => e.t === undefined || typeof e.t === "string"));
+      assert.ok(ev.some((e) => e.thinking));
+      assert.ok(!JSON.stringify(ev).includes("a ver"), "el razonamiento previo no entra en la sala");
+    } finally { s.restore(); }
+  });
+  assert.equal(mod.deltaText([{ type: "text", text: "a" }, "b", { type: "thinking", thinking: [] }, null]), "ab");
+  assert.equal(mod.deltaText(undefined), "");
+});
+
 test("el turno de Claude usa su formato y repite sin el nivel de razonamiento si el modelo no lo admite", async () => {
   await env({ MEETING_TOKEN: TOKEN }, async () => {
     const s = stub((c, n) => (n === 1 ? new Response(JSON.stringify({ error: { message: "output_config no admitido" } }), { status: 400 }) : sse([{ type: "message_start", message: { usage: { input_tokens: 300 } } }, { type: "content_block_delta", delta: { type: "text_delta", text: "De acuerdo en parte." } }, { type: "message_delta", usage: { output_tokens: 9 } }])));

@@ -137,12 +137,16 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
     "",
     "- Intervienes solo cuando te toca y hablas solo por ti. No escribas intervenciones de otros participantes ni de la moderadora.",
     "- Lee toda la transcripción antes de hablar. No repitas lo ya dicho: si coincides con alguien, dilo en una línea y aporta lo que falta.",
-    "- Si alguien se equivoca, incluida la moderadora, dilo y explica por qué. No des la razón por cortesía ni suavices una objeción de fondo.",
+    "- Si alguien se equivoca en algo de fondo, incluida la moderadora, dilo y explica por qué. No des la razón por cortesía ni suavices una objeción. No corrijas erratas ni formas de hablar.",
     "- Separa lo que es un hecho comprobable con el material de la sala de lo que es interpretación tuya.",
     "- No afirmes haber visto nada que no esté en la sala. Si te falta un dato para opinar, pídelo.",
     "- Sé breve: unas 200 palabras, salvo que la moderadora pida más. Sin introducciones ni despedidas.",
+    "- A un saludo o a una prueba de sonido se responde en una línea.",
     "- Responde en español."
   ].join("\n");
+  // Reglas iniciales de versiones anteriores: si la sala las tiene sin tocar, se actualizan solas.
+  var OLD_RULES = ["- Si alguien se equivoca, incluida la moderadora, dilo y explica por qué. No des la razón por cortesía ni suavices una objeción de fondo."];
+  function outdated(text) { return OLD_RULES.some(function (line) { return text.indexOf(line) >= 0; }) && text.split("\n").length === 9; }
   var $ = function (s) { return document.querySelector(s); };
   var el = function (tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 
@@ -158,7 +162,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
       if (raw && raw.people) {
         ORDER.forEach(function (p) { if (raw.people[p]) { s.people[p].on = raw.people[p].on !== false; s.people[p].model = raw.people[p].model || ""; s.people[p].key = raw.people[p].key || ""; } });
         s.remember = raw.remember !== false; s.rotate = raw.rotate !== false;
-        s.rules = typeof raw.rules === "string" && raw.rules.trim() ? raw.rules : RULES;
+        s.rules = typeof raw.rules === "string" && raw.rules.trim() && !outdated(raw.rules) ? raw.rules : RULES;
         s.brief = raw.brief || ""; s.next = raw.next || 0;
         s.log = Array.isArray(raw.log) ? raw.log.filter(function (e) { return e && e.text; }) : [];
       }
@@ -305,7 +309,7 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--m
               var chunk = buf.slice(0, i); buf = buf.slice(i + 2);
               if (chunk.indexOf("data: ") !== 0) continue;
               var ev; try { ev = JSON.parse(chunk.slice(6)); } catch (x) { continue; }
-              if (ev.t) { var stick = log.scrollHeight - log.scrollTop - log.clientHeight < 80; e.text += ev.t; e._body.className = "body"; e._body.innerHTML = fmt(e.text); if (stick) log.scrollTop = log.scrollHeight; }
+              if (typeof ev.t === "string" && ev.t) { var stick = log.scrollHeight - log.scrollTop - log.clientHeight < 80; e.text += ev.t; e._body.className = "body"; e._body.innerHTML = fmt(e.text); if (stick) log.scrollTop = log.scrollHeight; }
               else if (ev.thinking && !e.text) e._body.textContent = e.name + " está razonando antes de escribir…";
               else if (ev.cut) e.cut = true;
               else if (ev.error) failed = ev.error;

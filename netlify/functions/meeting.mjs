@@ -119,6 +119,16 @@ async function models(provider, key) {
 }
 
 /* ---------- un turno ---------- */
+// El texto de un fragmento. Casi todos los proveedores lo envían como cadena; algunos
+// (Mistral con sus modelos recientes) lo envían como lista de trozos con tipo, donde el
+// razonamiento previo va aparte del texto.
+export function deltaText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((c) => (typeof c === "string" ? c : c && c.type === "text" && typeof c.text === "string" ? c.text : "")).join("");
+}
+const isThinking = (content) => Array.isArray(content) && content.some((c) => c && typeof c === "object" && c.type && c.type !== "text");
+
 // Lee un flujo SSE y entrega cada objeto «data:» ya analizado.
 async function eachEvent(res, signal, onEvent) {
   const reader = res.body.getReader();
@@ -192,8 +202,8 @@ function turn(provider, { key, model, system, prompt }) {
             else if (ev.type === "error") send({ error: P.name + ": " + String(ev.error?.message || "error").slice(0, 300) });
           } else {
             const d = ev.choices?.[0]?.delta;
-            if (d?.content) text = d.content;
-            else if (d?.reasoning_content && !thinking) thinking = true;
+            text = deltaText(d?.content);
+            if (!text && (d?.reasoning_content || isThinking(d?.content))) thinking = true;
             if (ev.usage) { usage.input = ev.usage.prompt_tokens || 0; usage.output = ev.usage.completion_tokens || 0; }
           }
           if (thinking && !chars && !text) { send({ thinking: true }); thinking = false; }
