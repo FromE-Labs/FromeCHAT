@@ -110,8 +110,12 @@
 
   /* ---------- modelos y módulos ---------- */
   const mods = { defs: [], on: new Set() };
-  function activeModules() { return mods.defs.filter((m) => mods.on.has(m.id)).map((m) => m.id); }
-  function saveModules() { try { localStorage.setItem("fromechat.modules", JSON.stringify(activeModules())); } catch {} }
+  // Interruptores de medición: no salen en la interfaz y solo se añaden por dirección
+  // (?medir=uno.otro). El servidor ignora los que no existan en su despliegue.
+  const measuring = (new URLSearchParams(location.search).get("medir") || "").split(/[.,]/).map((x) => x.trim()).filter((x) => /^[a-z]{2,20}$/.test(x)).slice(0, 6);
+  function shownModules() { return mods.defs.filter((m) => mods.on.has(m.id)).map((m) => m.id); }
+  function activeModules() { return shownModules().concat(measuring.filter((id) => !mods.on.has(id))); }
+  function saveModules() { try { localStorage.setItem("fromechat.modules", JSON.stringify(shownModules())); } catch {} }
   function paintModules() {
     for (const lab of el.mods.querySelectorAll("label.toggle")) {
       const inp = lab.querySelector("input"); inp.checked = mods.on.has(inp.dataset.mod); lab.classList.toggle("on", inp.checked);
@@ -123,7 +127,6 @@
     }
   }
   // Nombre y descripción de módulos y niveles: los del servidor en español; traducidos por identificador.
-  function modLabel(labelEs) { const m = mods.defs.find((x) => x.label === labelEs); return m ? T("mod." + m.id, labelEs) : labelEs; }
   function buildModules(d, keep) {
     mods.data = d;
     mods.defs = d.modules || [];
@@ -179,7 +182,7 @@
     el.pillGov.classList.toggle("on", gov);
     el.pillGov.innerHTML = '<span class="dot"></span> ' + esc(gov ? T("d.pill.on", "From E™ activa") : T("d.without", "Sin arquitectura"));
     el.headA.textContent = gov ? T("d.with", "Con From E™") : T("d.without", "Sin arquitectura");
-    el.hintR.textContent = gov ? (cmp ? T("d.cost3", "Coste por mensaje: 3 llamadas (comprobación de entrada, generación gobernada y respuesta directa); con el ciclo por etapas, más") : T("d.cost2", "Coste por mensaje: 2 llamadas (comprobación de entrada y generación gobernada); con el ciclo por etapas, más")) : "";
+    el.hintR.textContent = gov ? T("d.cost", "Con From E™ activa, cada mensaje consume más que una respuesta directa.") : "";
     el.modsBox.classList.toggle("off", !gov);
     for (const inp of el.mods.querySelectorAll("input")) inp.disabled = !gov;
     for (const bt of el.presets.querySelectorAll("button")) bt.disabled = !gov;
@@ -193,31 +196,11 @@
     const m = document.createElement("div"); m.className = "msg " + role;
     const who = document.createElement("div"); who.className = "who"; who.textContent = role === "user" ? T("d.you", "Tú") : (opts.label || T("d.model", "Modelo"));
     m.appendChild(who);
-    let trace = null;
-    if (opts.trace) { trace = document.createElement("ol"); trace.className = "trace"; m.appendChild(trace); }
     const body = document.createElement("div"); body.className = "body" + (opts.streaming ? " streaming" : "");
     body.textContent = text;
     m.appendChild(body); thread.appendChild(m);
     thread.scrollTop = thread.scrollHeight;
-    return { body, trace, thread };
-  }
-
-  // Traza del ciclo: una fila por etapa, con su estado y su nota.
-  function traceRow(ui, id, label, detail) {
-    if (!ui.trace) return;
-    const last = ui.trace.lastElementChild;
-    if (last && last.dataset.id === id && last.classList.contains("run")) return; // reintento de la misma etapa
-    const li = document.createElement("li"); li.className = "run"; li.dataset.id = id;
-    const b = document.createElement("b"); b.textContent = label || id; li.appendChild(b);
-    if (detail) { const d = document.createElement("span"); d.textContent = detail; li.appendChild(d); }
-    ui.trace.appendChild(li); ui.thread.scrollTop = ui.thread.scrollHeight;
-  }
-  function traceDone(ui, id, note, cls) {
-    if (!ui.trace) return;
-    const last = ui.trace.lastElementChild;
-    if (!last || last.dataset.id !== id) return;
-    last.className = cls || "ok";
-    if (note) { const n = document.createElement("em"); n.textContent = note; last.appendChild(n); }
+    return { body, thread };
   }
 
   /* ---------- formato (Markdown mínimo y seguro) ---------- */
@@ -308,17 +291,7 @@
           const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
           const line = chunk.split("\n").find((l) => l.startsWith("data: ")); if (!line) continue;
           let ev; try { ev = JSON.parse(line.slice(6)); } catch { continue; }
-          if (ev.type === "frome_route") {
-            if (!acc.route) { acc.route = ev.route; if (governed) traceDone(ui, "gate", ev.route === "public" ? T("d.route.public", "ruta pública") : ""); }
-          } else if (ev.type === "frome_modules") {
-            if (ui.trace && !ui.trace.querySelector("li.mods")) {
-              const li = document.createElement("li"); li.className = "ok mods"; li.dataset.id = "mods";
-              const b = document.createElement("b"); b.textContent = T("a.mods.h", "Módulos"); const sp = document.createElement("span"); sp.textContent = ev.labels.length ? ev.labels.map(modLabel).join(" · ") : T("d.mods.none", "ninguno (reglas base)");
-              li.appendChild(b); li.appendChild(sp); ui.trace.insertBefore(li, ui.trace.firstChild);
-            }
-          } else if (ev.type === "frome_stage") {
-            if (ev.status === "running") traceRow(ui, ev.id, T("stage." + ev.id, ev.label), T("stage." + ev.id + ".d", ev.detail)); else traceDone(ui, ev.id, I.fragments(ev.note));
-          } else if (ev.type === "frome_continue") cont = ev.state;
+          if (ev.type === "frome_continue") cont = ev.state;
           else if (ev.type === "frome_deliver") acc.kind = ev.kind;
           else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") {
             acc.text += ev.delta.text; ui.body.hidden = false;
@@ -338,10 +311,9 @@
   }
 
   async function ask({ governed, messages, thread, label, meta }) {
-    const ui = addMsg(thread, "assistant", "", { streaming: true, label, trace: governed });
-    const acc = { text: "", signal: "", kind: "answer", held: false, truncated: false, usage: null, route: null };
+    const ui = addMsg(thread, "assistant", "", { streaming: true, label });
+    const acc = { text: "", signal: "", kind: "answer", held: false, truncated: false, usage: null };
     const t0 = performance.now();
-    if (governed) { ui.body.hidden = true; traceRow(ui, "gate", T("d.gate", "Comprobación de entrada"), T("d.gate.d", "llamada breve a un modelo rápido")); }
     let token = null, tries = 0;
     const modules = activeModules(); // fijados para toda la respuesta
     for (;;) {
@@ -350,7 +322,6 @@
       if (r.done) break;
       // Solo se reintenta una etapa del ciclo: su estado anterior sigue siendo válido.
       if (r.retry && governed && !acc.text && tries < 2) { tries++; await sleep(r.wait || 1500 * tries); continue; }
-      if (ui.trace && ui.trace.lastElementChild) ui.trace.lastElementChild.className = "fail";
       ui.body.hidden = false; ui.body.classList.remove("streaming"); ui.body.classList.add("error");
       ui.body.textContent = acc.text ? acc.text + "\n\n[" + r.error + "]" : r.error;
       throw new Error(r.error);
@@ -369,7 +340,7 @@
     if (acc.signal && !acc.held) { const sg = document.createElement("span"); sg.className = "signal"; sg.textContent = "⟶ Signal: " + I.fragments(acc.signal); ui.body.appendChild(sg); }
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     const u = acc.usage;
-    meta.textContent = (u ? (u.calls === 1 ? T("d.call1", "1 llamada") : T("d.calln", "{n} llamadas", { n: u.calls })) + " · " + u.input + " in" + (u.cached ? " " + T("d.cached", "({n} de caché)", { n: u.cached }) : "") + " · " + u.output + " out · " : "") + secs + " s";
+    meta.textContent = (u ? u.input + " in · " + u.output + " out · " : "") + secs + " s";
     ui.thread.scrollTop = ui.thread.scrollHeight;
     return text;
   }

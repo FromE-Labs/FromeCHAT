@@ -172,10 +172,39 @@ export function stageSystem(stage, ctx) {
   return parts ? stage.system + "\n\n" + parts : stage.system;
 }
 
-export function newState(pipeline, { bind, ttl, modules = [] }) {
+// Bloques de sistema de una etapa. Normalmente es uno solo, idéntico a stageSystem. Si
+// la etapa define tail_when y esa condición se cumple, las partes marcadas con tail van
+// al final de las partes, en un bloque propio: lo que no cambia de un mensaje a otro
+// queda delante y el proveedor puede reutilizarlo de su caché aunque cambie el resto.
+// La unión de los bloques es el mismo texto con esas partes movidas al final.
+export function stageBlocks(stage, ctx) {
+  const on = (p) => (p.when === undefined || truthy(getPath(ctx, p.when))) && (p.unless === undefined || !truthy(getPath(ctx, p.unless)));
+  const split = stage.tail_when !== undefined && truthy(getPath(ctx, stage.tail_when));
+  const live = (stage.parts || []).filter(on);
+  const tail = split ? live.filter((p) => p.tail).map((p) => p.text).join("\n\n") : "";
+  if (!tail) return [stageSystem(stage, ctx)];
+  const head = live.filter((p) => !p.tail).map((p) => p.text).join("\n\n");
+  const i = stage.system.indexOf("{{PARTS}}");
+  const before = i < 0 ? stage.system + (head ? "\n\n" + head : "") : stage.system.slice(0, i) + head;
+  const after = i < 0 ? "" : stage.system.slice(i + "{{PARTS}}".length);
+  const glue = i < 0 || head ? "\n\n" : "";
+  // Un bloque vacío no es válido para el proveedor: lo que no tenga texto se une al siguiente.
+  const out = before.trim() ? [before, glue + tail] : [before + glue + tail];
+  if (after.trim()) out.push(after);
+  else out[out.length - 1] += after;
+  return out;
+}
+
+// route, si viene, es el resultado del encaminador (ver router.mjs): { modules, marks,
+// types }. Acota los módulos de su ámbito a los que tocan a este mensaje. Las banderas
+// se calculan siempre con lo que eligió el usuario: el nivel de respuesta no cambia.
+export function newState(pipeline, { bind, ttl, modules = [], route = null }) {
   const visits = {};
   for (const id of Object.keys(pipeline.stages)) visits[id] = 0;
   const flags = computeFlags(pipeline, modules);
+  const scope = new Set(pipeline.routing?.scope || []);
+  const keep = Array.isArray(route?.modules) ? new Set(route.modules) : null;
+  const active = keep ? modules.filter((id) => !scope.has(id) || keep.has(id)) : modules;
   // La etapa inicial es fija o depende de los módulos activos (lista de reglas con goto).
   const start =
     typeof pipeline.start === "string"
@@ -189,8 +218,10 @@ export function newState(pipeline, { bind, ttl, modules = [] }) {
     step: 0,
     vars: {},
     visits,
-    modules: Object.fromEntries(modules.map((id) => [id, true])),
+    modules: Object.fromEntries(active.map((id) => [id, true])),
     flags,
+    marks: route?.marks || {},
+    types: route?.types || [],
     usage: { input: 0, output: 0, calls: 0 },
     path: [],
     truncated: false,
@@ -209,12 +240,20 @@ export async function runStage({ pipeline, st, key, model, messages, deadline, g
 
   const ctx = contextOf(st, messages);
   const input = render(stage.input, ctx, { guard });
-  const base = stageSystem(stage, ctx);
+  const blocks = stageBlocks(stage, ctx);
   // En la generación con conversación, el bloque de instrucciones es el mismo en cada
   // mensaje: se marca para que el proveedor lo guarde en caché y lo reutilice. No cambia
-  // lo que recibe el modelo; cambia lo que se factura desde el segundo mensaje.
-  const baseBlock = stage.conversation ? { type: "text", text: base, cache_control: { type: "ephemeral" } } : { type: "text", text: base };
-  const system = stage.conversation && input.trim() ? [baseBlock, { type: "text", text: input }] : [baseBlock];
+  // lo que recibe el modelo; cambia lo que se factura desde el segundo mensaje. Si hay
+  // varios bloques, se marcan el primero (lo fijo) y el último (el conjunto completo).
+  let system;
+  if (stage.conversation) {
+    system = blocks.map((text) => ({ type: "text", text }));
+    system[0].cache_control = { type: "ephemeral" };
+    if (system.length > 1) system[system.length - 1].cache_control = { type: "ephemeral" };
+    if (input.trim()) system.push({ type: "text", text: input });
+  } else {
+    system = [{ type: "text", text: blocks.join("") }];
+  }
   const msgs = stage.conversation ? messages : [{ role: "user", content: input }];
   const call = () =>
     callModel({

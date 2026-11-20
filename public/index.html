@@ -36,7 +36,7 @@
   <div class="wrap">
     <div class="eyebrow" data-i18n="h.eyebrow">Beta abierta · Sin cuenta · Tu clave, tu consumo</div>
     <h1>FromE Chat.</h1>
-    <p class="hero-sub" data-i18n="h.sub">La arquitectura de gobernanza From E™, puesta a prueba en abierto sobre modelos de frontera.</p>
+    <p class="hero-sub" data-i18n="h.sub">La arquitectura de gobernanza From E™, puesta a prueba en abierto sobre modelos de frontera de Anthropic.</p>
     <div class="hero-grid">
       <div>
         <p class="hero-copy" data-i18n="h.copy">Planteas un caso tuyo y recibes dos respuestas del mismo modelo: una directa y otra gobernada por From E™. Juzgas la diferencia con tu criterio, no con una demostración preparada. <strong>From E™ Systems no cobra nada: conectas tu clave de API de Anthropic y pagas tu consumo al proveedor.</strong></p>
@@ -56,7 +56,7 @@
     <div class="section-label" data-i18n="h.s1.label">01 — La prueba</div>
     <div>
       <h2 data-i18n="h.s1.h2">Mismo modelo, misma pregunta. Con y sin arquitectura.</h2>
-      <p class="lead" data-i18n="h.s1.lead1">From E™ es una capa externa de gobernanza cognitiva para modelos de lenguaje: impone invariantes estructurales a la generación para que el resultado se mantenga coherente con un núcleo declarado, con independencia de las tendencias estadísticas del modelo. FromE Chat la expone a quien quiera examinarla con sus propios casos.</p>
+      <p class="lead" data-i18n="h.s1.lead1">From E™ es una capa externa de gobernanza cognitiva para modelos de lenguaje. Su especificación la define así: impone invariantes estructurales a la generación para que el resultado se mantenga coherente con un núcleo declarado, con independencia de las tendencias estadísticas del modelo. FromE Chat pone esa afirmación a prueba en abierto, con tus casos.</p>
       <div class="cards">
         <article class="card"><div class="num">01</div><h3 data-i18n="h.s1.c1.h">Comparador en el centro</h3><p data-i18n="h.s1.c1.p">Cada mensaje se responde dos veces, lado a lado: con From E™ y sin arquitectura, con el mismo modelo y el mismo techo de salida. Viene activado por defecto.</p></article>
         <article class="card"><div class="num">02</div><h3 data-i18n="h.s1.c2.h">Módulos que enciendes y apagas</h3><p data-i18n="h.s1.c2.p">En esta beta los módulos de trabajo de la arquitectura se activan por separado. Puedes pedir solo la pregunta decisiva, o todos los módulos, y ver qué cambia frente a la respuesta directa.</p></article>
@@ -71,19 +71,19 @@
   <div class="wrap section-grid">
     <div class="section-label" data-i18n="h.s2.label">02 — La arquitectura</div>
     <div>
-      <h2 data-i18n="h.s2.h2">Dos llamadas por respuesta: comprobación y generación. El ciclo por etapas, si lo activas.</h2>
-      <p class="lead" data-i18n="h.s2.lead1">Con From E™ activa, tu mensaje se responde en dos llamadas: una comprobación de entrada breve, con un modelo rápido, y una generación en la que el modelo aplica los módulos que tengas encendidos. Lo que se entrega pasa además por un filtro. Si activas el módulo «Ciclo por etapas», la respuesta recorre en servidor el flujo operativo de la especificación (DOI 10.5281/zenodo.19041459) en varias llamadas separadas, como se describe abajo, y solo se entrega lo que supera la puerta final. En pantalla ves qué se ejecuta y con qué resultado; no ves cómo está construida.</p>
+      <h2 data-i18n="h.s2.h2">Qué hace From E™ con cada respuesta.</h2>
+      <p class="lead" data-i18n="h.s2.lead1">Abajo tienes los siete módulos de la especificación publicada (DOI 10.5281/zenodo.19041459) y qué hace cada uno. En pantalla enciendes y apagas otra lista: seis módulos de trabajo, que es lo que esta beta aplica a tu mensaje. El ciclo completo de la especificación es una opción aparte, apagada por defecto. Lo que se entrega pasa antes un control. Ves el resultado; no ves cómo está construida.</p>
       <p class="lead" data-i18n="h.s2.lead2">Tú eliges cuánto gastas. Hay cuatro niveles, de menos a más consumo. «Pregunta clave» no contesta: devuelve solo la pregunta que más cambia la respuesta, para pensar antes de decidir. «Respuesta clave» da lo esencial en pocas líneas. «Completo», el nivel por defecto, aplica los seis módulos y comprime la respuesta. «Análisis avanzado» delibera antes de contestar y desarrolla la respuesta entera: tarda más y consume más, y está pensada para problemas graves.</p>
       <div class="modules">
         <div><small>01</small><b>Internal Editor™</b><span data-i18n="h.s2.m1">Estructura la petición antes de generar: qué se pide, qué se aporta, qué falta. Si falta un dato esencial, pregunta en lugar de suponer.</span></div>
         <div><small>02</small><b>Invariant Coherence</b><span data-i18n="h.s2.m2">Fija el núcleo de la conversación y sujeta a él la generación; lo que se aparta del núcleo es deriva.</span></div>
         <div><small>03</small><b>Symbolic Echo Cleaner™</b><span data-i18n="h.s2.m3">Suprime adulación, espejo y relleno estructuralmente vacío durante la generación.</span></div>
-        <div><small>04</small><b>Extreme Thinking™</b><span data-i18n="h.s2.m4">Somete el borrador a escrutinio hostil en una llamada independiente, que no lo ha escrito.</span></div>
-        <div><small>05</small><b>Constructive Loop™</b><span data-i18n="h.s2.m5">Corrige por iteración acotada lo que el escrutinio señala, sin regenerar desde cero.</span></div>
+        <div><small>04</small><b>Extreme Thinking™</b><span data-i18n="h.s2.m4">Somete la respuesta a escrutinio hostil antes de entregarla.</span></div>
+        <div><small>05</small><b>Constructive Loop™</b><span data-i18n="h.s2.m5">Corrige lo que el escrutinio señala.</span></div>
         <div><small>06</small><b>RTN Rule</b><span data-i18n="h.s2.m6">Exclusiones categóricas: silencio estructural antes que falsedad probable. Si se activa, la respuesta no se entrega.</span></div>
         <div><small>07</small><b>Core Self-Validator™</b><span data-i18n="h.s2.m7">Puerta final contra el núcleo antes de la entrega.</span></div>
       </div>
-      <div class="note" data-i18n="h.s2.note">Cada respuesta gobernada termina con una línea de señal (Signal System™) que compone el servidor a partir de lo que ocurrió realmente en el servidor, no de lo que el modelo dice de sí mismo. La implementación operativa es propietaria y no se divulga; los módulos del Runtime comercial no forman parte de esta plataforma.</div>
+      <div class="note" data-i18n="h.s2.note">Cada respuesta gobernada termina con una línea de señal (Signal System™) que resume el resultado. La implementación operativa es propietaria y no se divulga; los módulos del Runtime comercial no forman parte de esta plataforma.</div>
     </div>
   </div>
 </section>
@@ -96,9 +96,9 @@
       <div class="steps">
         <div class="step"><small data-i18n="h.s3.t1.s">01 · Tu navegador</small><b data-i18n="h.s3.t1.b">Interfaz y clave</b><p data-i18n="h.s3.t1.p">Pegas tu clave de API. Queda en la memoria de tu navegador (cifrada si eliges recordarla) y se envía por HTTPS solo con cada petición. La conversación no se guarda.</p></div>
         <div class="step"><small data-i18n="h.s3.t2.s">02 · Servidor From E™</small><b data-i18n="h.s3.t2.b">Gobierno en servidor</b><p data-i18n="h.s3.t2.p">Aplica la arquitectura con tu clave y comprueba lo que se entrega. No conserva la clave ni la conversación.</p></div>
-        <div class="step"><small data-i18n="h.s3.t3.s">03 · Proveedor</small><b data-i18n="h.s3.t3.b">Modelo de frontera</b><p data-i18n="h.s3.t3.p">Anthropic ejecuta y te factura a ti. Una respuesta gobernada es una llamada al modelo más una comprobación de entrada breve; con el ciclo por etapas son entre cuatro y seis.</p></div>
+        <div class="step"><small data-i18n="h.s3.t3.s">03 · Proveedor</small><b data-i18n="h.s3.t3.b">Modelo de frontera</b><p data-i18n="h.s3.t3.p">Anthropic ejecuta y te factura a ti. Una respuesta gobernada consume más que una directa; con el ciclo por etapas, varias veces más.</p></div>
       </div>
-      <div class="note" data-i18n="h.s3.note">El coste de cada respuesta queda a la vista: la interfaz muestra las llamadas realizadas y los tokens consumidos en cada lado del comparador. Los dos lados usan el mismo modelo, el mismo techo de salida y el mismo nivel de razonamiento previo, fijado al mínimo en esta fase para que cada llamada quepa en el tiempo de ejecución de la plataforma.</div>
+      <div class="note" data-i18n="h.s3.note">El coste de cada respuesta queda a la vista: la interfaz muestra los tokens consumidos en cada lado del comparador. Los dos lados usan el mismo modelo y el mismo techo de salida.</div>
     </div>
   </div>
 </section>
@@ -138,7 +138,7 @@
 <footer>
   <div class="wrap footer-inner">
     <span>FromE Chat · by From E™ Systems (Volyen Project SL, Barcelona)</span>
-    <span><a href="https://frome-one.com/es/" target="_blank" rel="noopener" data-i18n-attr="href:url.frome">From E™ ONE</a> · <a href="https://doi.org/10.5281/zenodo.19041459" target="_blank" rel="noopener" data-i18n="c.spec">Especificación</a> · <a href="https://github.com/FromE-Labs/FromeCHAT" target="_blank" rel="noopener" data-i18n="c.code">Código</a> · <a href="/privacidad/" data-i18n="c.privacy">Privacidad</a></span>
+    <span><a href="https://frome-one.com/es/" target="_blank" rel="noopener" data-i18n-attr="href:url.frome">From E™ ONE</a> · <a href="https://doi.org/10.5281/zenodo.19041459" target="_blank" rel="noopener" data-i18n="c.spec">Especificación</a> · <a href="/privacidad/" data-i18n="c.privacy">Privacidad</a></span>
   </div>
 </footer>
 </body>

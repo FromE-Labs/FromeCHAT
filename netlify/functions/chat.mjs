@@ -20,7 +20,9 @@ import { LeakFilter } from "./lib/shield.mjs";
 import { gate } from "./lib/gate.mjs";
 import { recordTurn } from "./lib/consent.mjs";
 import { openStream, readStream, upstreamError } from "./lib/anthropic.mjs";
-import { runStage, newState, contextOf, getPath, render, pickModules } from "./lib/engine.mjs";
+import { runStage, newState, contextOf, getPath, render, pickModules, computeFlags } from "./lib/engine.mjs";
+import { routingActive, route } from "./lib/router.mjs";
+import { closingApplies, dropClosingQuestion } from "./lib/closing.mjs";
 import { seal, unseal, bindingOf, STATE_TTL_MS } from "./lib/seal.mjs";
 import { courtesyConfig, takeCourtesy, refundCourtesy, COURTESY_MODEL, COURTESY_MAX_CHARS, COURTESY_MAX_TOTAL_CHARS } from "./lib/courtesy.mjs";
 
@@ -69,6 +71,28 @@ function sanitizeMessages(raw) {
   return out;
 }
 
+// Lo que sale hacia el navegador dice qué se entrega, no cómo se produce: sin ruta, sin
+// módulos, sin etapas, sin recuento de llamadas ni detalle de caché, y con la línea de
+// señal reducida a su resultado.
+export function outward(ev) {
+  switch (ev?.type) {
+    case "frome_route":
+    case "frome_modules":
+    case "frome_stage":
+      return null;
+    case "frome_usage":
+      return { type: "frome_usage", usage: { input: ev.usage?.input || 0, output: ev.usage?.output || 0 } };
+    case "frome_signal": {
+      const text = String(ev.text || "").split(" · ")[0].trim();
+      return text ? { type: "frome_signal", text } : null;
+    }
+    default:
+      return ev;
+  }
+}
+// Solo para las pruebas: recibe cada evento antes de filtrarlo. No sale por la red.
+export const tap = { fn: null };
+
 // Respuesta SSE con latido: run(send) emite eventos; el flujo se cierra al terminar.
 function sse(route, run, extra = {}) {
   const enc = new TextEncoder();
@@ -78,7 +102,11 @@ function sse(route, run, extra = {}) {
       const write = (s) => {
         if (open) controller.enqueue(enc.encode(s));
       };
-      const send = (ev) => write(`data: ${JSON.stringify(ev)}\n\n`);
+      const send = (ev) => {
+        if (tap.fn) tap.fn(ev);
+        const out = outward(ev);
+        if (out) write(`data: ${JSON.stringify(out)}\n\n`);
+      };
       const beat = setInterval(() => write(": ping\n\n"), 10000);
       try {
         send({ type: "frome_route", route });
@@ -223,6 +251,8 @@ function cycleStep({ g, st, key, model, messages, consent, sessionId, deadline, 
       send({ type: "error", error: { message: "El ciclo no ha producido respuesta. Vuelve a enviar el mensaje.", retryable: false } });
       return;
     }
+    // Regla visible: si el usuario pidió que no se le pregunte más, el cierre no es una pregunta.
+    if (!notice && !st.truncated && closingApplies(pipeline, st, ctx)) text = dropClosingQuestion(text).text;
     if (!clean(g, text) || !clean(g, signal)) {
       send({ type: "frome_blocked" });
       return;
@@ -305,8 +335,13 @@ export default async (req) => {
     return cycleStep({ g, st, ...common });
   }
 
-  // Primer paso: clasificador de entrada y, si procede, primera etapa.
-  const verdict = await gate({ key, messages });
+  // Primer paso: clasificador de entrada y, si procede, primera etapa. Si el encaminador
+  // por tipo de caso está activo, sale a la vez que el clasificador: no añade espera.
+  const routing = g.pipeline && routingActive(g.pipeline, computeFlags(g.pipeline, modules));
+  const [verdict, routed] = await Promise.all([
+    gate({ key, messages }),
+    routing ? route({ pipeline: g.pipeline, key, messages, flags: computeFlags(g.pipeline, modules) }).catch(() => null) : null,
+  ]);
   if (verdict.auth === false) {
     if (courtesy) {
       await courtesy.refund();
@@ -314,13 +349,17 @@ export default async (req) => {
     }
     return json(401, { error: "upstream", status: verdict.status, message: verdict.message || "Clave rechazada por el proveedor." });
   }
-  if (verdict.probe) return single({ route: "public", ...common, extraUsage: verdict.usage || { input: 0, output: 0 } });
+  if (verdict.probe) {
+    const extraUsage = { input: (verdict.usage?.input || 0) + (routed?.usage?.input || 0), output: (verdict.usage?.output || 0) + (routed?.usage?.output || 0) };
+    return single({ route: "public", ...common, extraUsage });
+  }
   if (!g.pipeline) return json(500, { error: "governance", message: "La arquitectura no está disponible en este despliegue." });
 
-  const st = newState(g.pipeline, { bind, ttl: STATE_TTL_MS, modules });
-  if (verdict.usage) {
-    st.usage.input += verdict.usage.input;
-    st.usage.output += verdict.usage.output;
+  const st = newState(g.pipeline, { bind, ttl: STATE_TTL_MS, modules, route: routed });
+  for (const u of [verdict.usage, routed?.usage]) {
+    if (!u) continue;
+    st.usage.input += u.input;
+    st.usage.output += u.output;
     st.usage.calls += 1;
   }
   return cycleStep({ g, st, ...common });
